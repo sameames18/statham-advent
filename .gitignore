@@ -1,0 +1,7 @@
+node_modules/
+data/
+*.log
+.DS_Store
+Thumbs.db
+scripts/films_raw.json
+__pycache__/

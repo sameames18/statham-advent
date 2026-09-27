@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stathmas</title>
+  <meta name="description" content="An advent calendar of Jason Statham action vehicles. One door a day, every day of December.">
+  <meta name="theme-color" content="#0d0c0b">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <p class="eyebrow"><span class="dot" aria-hidden="true"></span><span>An advent calendar &middot; <span data-year>December</span></span></p>
+    <h1 class="wordmark">Stath<span>mas</span></h1>
+    <p class="dek">Thirty-one doors. <span data-film-count>Twenty-eight</span> films. One man, extremely serious about all of it.</p>
+
+    <div class="status" aria-live="polite">
+      <p class="status-line" data-status>Loading the calendar&hellip;</p>
+      <div class="meter" role="progressbar" aria-label="Doors opened" aria-valuemin="0" aria-valuemax="31" aria-valuenow="0">
+        <span class="meter-watched"></span><span class="meter-opened"></span>
+      </div>
+      <dl class="tally">
+        <div><dt>Opened</dt><dd data-stat="opened">0</dd></div>
+        <div><dt>Watched</dt><dd data-stat="watched">0</dd></div>
+        <div><dt>To go</dt><dd data-stat="togo">31</dd></div>
+      </dl>
+    </div>
+  </header>
+
+  <main>
+    <div class="weekdays" aria-hidden="true">
+      <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+    </div>
+    <ol class="calendar" data-calendar aria-label="December doors"></ol>
+  </main>
+
+  <footer class="footer">
+    <div class="preview" data-preview hidden>
+      <label for="preview-date">
+        <span class="preview-title">Preview mode</span>
+        <span class="preview-hint">Pretend it&rsquo;s another day. Doors open by the date you pick.</span>
+      </label>
+      <div class="preview-controls">
+        <input type="date" id="preview-date" data-preview-date>
+        <button type="button" class="chip" data-preview-jump="today">Mid-December</button>
+        <button type="button" class="chip" data-preview-jump="eve">Dec 31</button>
+        <button type="button" class="chip chip-quiet" data-preview-clear>Real date</button>
+        <button type="button" class="chip chip-quiet" data-reset>Close all my doors</button>
+      </div>
+    </div>
+    <p class="colophon">Film facts from Wikipedia. Opinions are ours. Not affiliated with Jason Statham, who would not approve of any of this.</p>
+  </footer>
+
+  <dialog class="sheet" data-sheet aria-labelledby="sheet-title">
+    <article class="sheet-inner">
+      <div class="sheet-poster" data-sheet-poster></div>
+      <div class="sheet-body">
+        <button type="button" class="sheet-close" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
+        </button>
+        <p class="sheet-kicker" data-sheet-kicker></p>
+        <h2 class="sheet-title" id="sheet-title" data-sheet-title></h2>
+        <p class="sheet-meta" data-sheet-meta></p>
+        <p class="sheet-as" data-sheet-as></p>
+        <p class="sheet-logline" data-sheet-logline></p>
+        <div class="sheet-note">
+          <h3>The briefing</h3>
+          <p data-sheet-note></p>
+        </div>
+        <dl class="sheet-facts" data-sheet-facts></dl>
+        <div class="sheet-actions">
+          <button type="button" class="btn btn-primary" data-watched aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Mark as watched</span>
+          </button>
+          <a class="btn btn-ghost" data-wiki target="_blank" rel="noopener">Wikipedia <span aria-hidden="true">&nearr;</span></a>
+        </div>
+        <nav class="sheet-nav" aria-label="Other opened doors">
+          <button type="button" class="link" data-step="-1">&larr; Previous door</button>
+          <button type="button" class="link" data-step="1">Next door &rarr;</button>
+        </nav>
+      </div>
+    </article>
+  </dialog>
+
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

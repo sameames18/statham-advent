@@ -1,0 +1,14 @@
+{
+  "name": "stathmas",
+  "version": "0.1.0",
+  "description": "An advent calendar of Jason Statham action vehicles.",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test",
+    "reshuffle": "node --disable-warning=ExperimentalWarning scripts/reshuffle.js"
+  }
+}
