@@ -153,13 +153,13 @@ test('opening a door shows its film card, and the door stays open after a reload
     assert.equal(await text(page, '[data-f-logline]'), film.logline);
     assert.equal(await text(page, '[data-f-note]'), film.note);
     assert.match(await page.locator('[data-f-wiki]').getAttribute('href'), /^https:\/\/en\.wikipedia\.org\/wiki\//);
-    assert.equal(await page.locator('[data-f-emblem] svg').count(), 1);
+    assert.equal(await page.locator('[data-f-emblem] img.emblem-image').count(), 1);
     assert.equal(await page.locator('[data-seen]').getAttribute('aria-checked'), 'false');
 
     assert.equal(await hasClass(door(page, 7), 'is-open'), true);
     assert.equal(await door(page, 7).getAttribute('aria-label'), `December 7: ${film.title}`);
     assert.equal(await door(page, 7).getAttribute('title'), film.title);
-    assert.equal(await door(page, 7).locator('.recess svg').count(), 1, 'the emblem sits behind the door');
+    assert.equal(await door(page, 7).locator('.recess img.emblem-image').count(), 1, 'the emblem sits behind the door');
     assert.match(await text(page, '.marquee'), /NOW SHOWING/);
     assert.equal(await cookie(context), '40.0', 'door 7 is bit 6 of the cookie');
 
@@ -422,7 +422,7 @@ test('a phone gets the tall picture, and the doors keep their state when it turn
     await page.waitForFunction(() => document.querySelector('.scene-svg').viewBox.baseVal.width > document.querySelector('.scene-svg').viewBox.baseVal.height);
     assert.equal(await page.locator('.door').count(), 31);
     assert.equal(await hasClass(door(page, 2), 'is-open'), true);
-    assert.equal(await door(page, 2).locator('.recess svg').count(), 1);
+    assert.equal(await door(page, 2).locator('.recess img.emblem-image').count(), 1);
   });
 });
 
@@ -478,7 +478,7 @@ test('the programme page lists every film while preview mode is on', async () =>
   await withPage({ path: '/catalog.html', preview: null, wait: false }, async (page) => {
     await page.locator('.film-entry').first().waitFor();
     assert.equal(await page.locator('.film-entry').count(), catalog.films().length);
-    assert.equal(await page.locator('.film-entry .emblem-svg').count(), catalog.films().length);
+    assert.equal(await page.locator('.film-entry .emblem-image').count(), catalog.films().length);
   });
 });
 

@@ -1,6 +1,6 @@
 import { composition } from './scene.js';
 import { faceSvg } from './doors.js';
-import { emblemSvg } from './emblems.js';
+import { emblemImage } from './emblems.js';
 import { esc } from './svg.js';
 import { billText, doorLabel, ordinal, previewNote, tagText } from './words.js';
 
@@ -93,7 +93,7 @@ function fillRecess(el, d) {
     return;
   }
   if (recess.dataset.slug !== d.film.slug) {
-    recess.innerHTML = emblemSvg(d.film.slug);
+    recess.innerHTML = emblemImage(d.film.slug);
     recess.dataset.slug = d.film.slug;
   }
   const tick = $('.tick', recess);
@@ -218,7 +218,7 @@ function fillFilm(detail) {
   const { day, film } = detail;
   state.filmDay = day;
   $('[data-f-day]').textContent = day;
-  $('[data-f-emblem]').innerHTML = emblemSvg(film.slug);
+  $('[data-f-emblem]').innerHTML = emblemImage(film.slug);
   $('[data-f-date]').textContent = `The ${ordinal(day)} of December`;
   $('[data-f-title]').textContent = film.title;
   $('[data-f-credit]').textContent = `${film.year} · Directed by ${film.director} · ${film.runtime} minutes`;

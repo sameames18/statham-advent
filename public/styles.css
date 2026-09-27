@@ -275,15 +275,16 @@ button { font: inherit; color: inherit; }
 
 .door.is-open .recess::before { opacity: 1; }
 
-.recess .emblem-svg {
+.recess .emblem-image {
+  display: block;
   position: relative;
   width: 88%;
   height: 88%;
-  --lw: 1.1px;
+  object-fit: contain;
 }
 
-.door.kind-church .recess .emblem-svg,
-.door.kind-moon .recess .emblem-svg { width: 76%; height: 76%; }
+.door.kind-church .recess .emblem-image,
+.door.kind-moon .recess .emblem-image { width: 76%; height: 76%; }
 
 .recess .tick path {
   stroke-dasharray: 60;
@@ -553,7 +554,7 @@ dialog::backdrop { background: rgba(8, 12, 26, .62); }
 }
 
 .film-emblem { width: 78%; }
-.film-emblem .emblem-svg { display: block; width: 100%; height: auto; --lw: 1.6px; }
+.film-emblem .emblem-image { display: block; width: 100%; height: auto; }
 
 .film-text { padding-top: 4px; }
 

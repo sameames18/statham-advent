@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { composition, DAYS, BIG_DOOR } from '../public/js/scene.js';
-import { EMBLEM_SLUGS, emblemSvg } from '../public/js/emblems.js';
+import { EMBLEM_SLUGS, emblemImage } from '../public/js/emblems.js';
 import { faceSvg } from '../public/js/doors.js';
 
 const films = JSON.parse(readFileSync(new URL('../server/data/films.json', import.meta.url), 'utf8'));
@@ -14,7 +14,10 @@ test('there is one film for every door', () => {
 
 test('every film has an emblem, and every emblem has a film', () => {
   assert.deepEqual([...EMBLEM_SLUGS].sort(), films.map((f) => f.slug).sort());
-  for (const f of films) assert.ok(!/NaN|undefined/.test(emblemSvg(f.slug)), f.slug);
+  for (const f of films) {
+    assert.ok(!/NaN|undefined/.test(emblemImage(f.slug)), f.slug);
+    assert.match(emblemImage(f.slug), new RegExp(`/emblems/${f.slug}\\.webp`));
+  }
 });
 
 for (const name of ['wide', 'tall']) {
