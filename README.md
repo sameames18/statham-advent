@@ -48,7 +48,7 @@ The server decides what's unlocked, so there's no peeking at future films throug
 - `js/svg.js` is the shared drawing kit. Every shape is printed twice, a flat ink plate slightly off register under a key line plate, which is where the cheap-print look comes from.
 - `js/app.js` lays the doors over the picture as HTML so they can swing open, and runs the film card, the ribbon tag, the picture house bill (the latest film opened, in slot-in letters), the list of doors and the glitter.
 
-Seven inks only (card, midnight, snow, fir, berry, candlelight, key), with Fraunces for numerals and titles, Libre Caslon Text for words, Berkshire Swash for the wordmark and Reenie Beanie for pencil notes, all from Google Fonts.
+Seven inks only (card, midnight, snow, fir, berry, candlelight, key), with Fraunces for numerals and titles, Libre Caslon Text for words, Berkshire Swash for the wordmark and Reenie Beanie for pencil notes. The fonts are served from `public/fonts/` (Latin subsets, cut by `scripts/subset_fonts.sh`) rather than from Google Fonts, so a visit makes no third-party request.
 
 **Data** lives in `data/stathmas.db`, which is created on first run and ignored by git.
 

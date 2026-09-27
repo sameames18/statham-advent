@@ -1,3 +1,48 @@
+/* Type. Served from public/fonts/, subsetted to Latin (see scripts/subset_fonts.sh).
+   All four faces are under the SIL Open Font License; the licence texts sit beside the files. */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url(fonts/fraunces-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Libre Caslon Text';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/libre-caslon-text-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Libre Caslon Text';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(fonts/libre-caslon-text-bold-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Libre Caslon Text';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/libre-caslon-text-italic-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Berkshire Swash';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/berkshire-swash-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Reenie Beanie';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/reenie-beanie-latin.woff2) format('woff2');
+}
+
 /* Stathmas: a printed card advent calendar, about 1962.
    Seven inks on card stock. No UI palette; every colour is an ink. */
 
