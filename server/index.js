@@ -100,8 +100,8 @@ function door(req, res, ctx, day, action) {
     store.open(ctx.visitor, ctx.year, day);
     store.setWatched(ctx.visitor, ctx.year, day, ctx.body?.watched !== false);
   }
-  const entry = store.days(ctx.year).find((e) => e.day === day);
-  const state = store.doorStates(ctx.visitor, ctx.year).get(day);
+  const entry = store.day(ctx.year, day);
+  const state = store.doorState(ctx.visitor, ctx.year, day);
   if (!state) return send(res, 403, { error: 'Not opened', message: 'Open the door first.' });
   return send(res, 200, { ...doorView(entry, ctx.now, ctx.year, state), film: filmDetail(entry.film) });
 }
