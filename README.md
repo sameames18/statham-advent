@@ -133,6 +133,14 @@ stathmas.example.com {
 
 Once HTTPS is in place, start the container with `SECURE_COOKIES=1`. The server then adds the `Secure` attribute to the anonymous visitor cookie, so browsers only send it over HTTPS. The server does not infer this from an `X-Forwarded-Proto` header: it is an explicit setting, so a proxy that forgets to set the header cannot silently downgrade the cookie, and local development over plain `http://` keeps working with the setting left unset. Do not set it without HTTPS, though. A browser drops a `Secure` cookie that arrives over `http://`, so every request would look like a new visitor and no door would stay open.
 
+### Link previews
+
+When the link is pasted into Slack, iMessage, Discord, X and the like, the preview shows `public/og.jpg`, a square 800×800 picture of Statham in a Santa hat, beside the title and description. The Open Graph tags in the head of `public/index.html` point at it, and `twitter:card` is `summary`, which asks for the small square rather than a wide banner. X and Discord honour that; other apps choose their own layout, and a few may show it larger or crop it.
+
+The crawlers that build these previews want the image's absolute URL, and only the deployment knows the domain, so set `SITE_URL` to the public address, e.g. `SITE_URL=https://stathmas.example.com`. The server writes it into the tag as it sends `index.html`. Unset, the tag is root-relative (`/og.jpg`), which is fine locally but which not every crawler resolves, and the server says so at startup. A value that isn't an http(s) address stops the server with an error. Previews are cached by each app, so after changing the image check it with an Open Graph preview checker, which fetches the page fresh, rather than by pasting the link again.
+
+To replace the picture, overwrite `public/og.jpg` with another square JPEG, keep it well under 300 KB (WhatsApp is widely reported to skip larger ones), and judge it shrunk to about 100 pixels, the size it's seen at.
+
 ### Before December
 
 - **Preview mode must be off.** With it on, anyone can open any door by adding `?preview=` to the URL, and `/catalog.html` lists every film. It is on by default for the prototype and is switched off with `TIME_TRAVEL=0`, which the compose file sets. If the server prints "Preview mode is on" at startup, it is on. (Check the top of `server/index.js` for the current name and default of this setting if the README and the code disagree.)
