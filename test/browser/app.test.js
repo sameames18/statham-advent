@@ -179,6 +179,17 @@ test('opening today\'s door changes the tag', async () => {
   });
 });
 
+test('the picture house letters a long title over two rows', async () => {
+  await withPage({}, async (page) => {
+    const title = catalog.day(2026, 9).film.title.toUpperCase();
+    assert.ok(title.length > 16 && !title.includes(':'), 'door 9 holds a long title with no subtitle');
+    await openDoor(page, 9);
+    const rows = await page.locator('.marquee .marquee-letters:not(.small)').allTextContents();
+    assert.equal(rows.length, 2);
+    assert.equal(rows.join(' '), title);
+  });
+});
+
 test('a locked door wobbles, says when it opens, and asks the server nothing', async () => {
   await withPage({}, async (page, context) => {
     const posts = [];
