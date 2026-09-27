@@ -1,5 +1,31 @@
 [
   {
+    "slug": "lock-stock-and-two-smoking-barrels",
+    "title": "Lock, Stock and Two Smoking Barrels",
+    "year": 1998,
+    "director": "Guy Ritchie",
+    "runtime": 106,
+    "character": "Bacon",
+    "gross": "$28.1M",
+    "wiki": "Lock,_Stock_and_Two_Smoking_Barrels",
+    "hue": 38,
+    "logline": "Four London friends stake £100,000 on a rigged card game, lose it plus another £500,000, and have one week to find the money.",
+    "note": "His film debut. He plays a street hustler, which he had actually been."
+  },
+  {
+    "slug": "snatch",
+    "title": "Snatch",
+    "year": 2000,
+    "director": "Guy Ritchie",
+    "runtime": 102,
+    "character": "Turkish",
+    "gross": "$83.6M",
+    "wiki": "Snatch_(film)",
+    "hue": 54,
+    "logline": "A stolen 84-carat diamond works its way through London's underworld while a small-time boxing promoter tries to survive a fixed fight gone wrong.",
+    "note": "He narrates. Brad Pitt plays a bare-knuckle boxer nobody can understand."
+  },
+  {
     "slug": "the-transporter",
     "title": "The Transporter",
     "year": 2002,
@@ -141,6 +167,19 @@
     "hue": 58,
     "logline": "Chev survives the fall and wakes up with his heart stolen, replaced by an artificial one that needs constant electrical charge.",
     "note": "Somehow more Crank than Crank."
+  },
+  {
+    "slug": "the-expendables",
+    "title": "The Expendables",
+    "year": 2010,
+    "director": "Sylvester Stallone",
+    "runtime": 103,
+    "character": "Lee Christmas",
+    "gross": "$274.5M",
+    "wiki": "The_Expendables_(2010_film)",
+    "hue": 16,
+    "logline": "A crew of ageing mercenaries takes a job to topple a dictator on a Gulf island and finds a rogue ex-CIA man running the show.",
+    "note": "The one ensemble film on the calendar, admitted on a technicality: his character's name is Lee Christmas."
   },
   {
     "slug": "the-mechanic",

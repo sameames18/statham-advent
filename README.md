@@ -4,9 +4,9 @@ An advent calendar of Jason Statham action vehicles. Thirty-one doors, one for e
 
 ## The films
 
-Twenty-eight films, every one where Statham is the lead in an action or crime picture: *The Transporter* (2002) through *Mutiny* (2026). Ensembles and franchise supporting turns are left out: the *Fast & Furious* films, *Hobbs & Shaw*, *The Expendables*, *The Italian Job*, *Snatch*, *Lock, Stock*, *Cellular*, *Spy*, *13* and the rest.
+Thirty-one films, one per door. Twenty-eight are every film where Statham is the lead in an action or crime picture, from *The Transporter* (2002) to *Mutiny* (2026). Three more are there by choice: *Lock, Stock and Two Smoking Barrels* and *Snatch*, the Guy Ritchie films that started it, and *The Expendables* as the one ensemble wildcard. The rest of the ensembles and supporting turns are left out: the *Fast & Furious* films, *Hobbs & Shaw*, the *Expendables* sequels, *The Italian Job*, *Cellular*, *Spy*, *13* and the rest.
 
-Twenty-eight films don't fill thirty-one days, so three days are **encores**: repeat showings of three different films, never the night after the original. The draw is random and happens once per year, the first time that year's calendar is requested. After that it's stored, so every visitor gets the same calendar.
+The order is random and drawn once per year, the first time that year's calendar is requested. After that it's stored, so every visitor gets the same calendar. (If the catalog ever has fewer films than days, the spare days become encores of films already shown.)
 
 Facts (director, runtime, release year, character, box office) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json` and is loaded into the database each time the server starts.
 

@@ -22,6 +22,13 @@ test('spare days become encores of distinct films, flagged on the later showing'
   }
 });
 
+test('with exactly 31 films, every day is a different film and nothing is an encore', () => {
+  const thirtyOne = Array.from({ length: 31 }, (_, i) => i + 1);
+  const cal = buildCalendar(thirtyOne, 42);
+  assert.equal(new Set(cal.map((d) => d.filmId)).size, 31);
+  assert.ok(cal.every((d) => !d.encore));
+});
+
 test('no film plays two nights running', () => {
   for (let seed = 1; seed <= 200; seed++) {
     const ids = buildCalendar(films, seed).map((d) => d.filmId);
