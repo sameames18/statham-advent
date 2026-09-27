@@ -10,8 +10,8 @@ import {
 
 const PORT = Number(process.env.PORT ?? 4747);
 const DEFAULT_TZ = process.env.DEFAULT_TZ ?? 'America/Los_Angeles';
-// Preview mode lets the client pretend it's a different date. Handy for a
-// prototype in September; switch it off (TIME_TRAVEL=0) for a real December.
+// Preview mode lets the client pretend it's a different date (?preview= in the
+// page URL). Handy outside December; switch it off (TIME_TRAVEL=0) for a real one.
 const TIME_TRAVEL = process.env.TIME_TRAVEL !== '0';
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const PUBLIC_ROOT = normalize(PUBLIC_DIR.endsWith(sep) ? PUBLIC_DIR : PUBLIC_DIR + sep);
@@ -176,5 +176,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Stathmas is running at http://localhost:${PORT}`);
-  if (TIME_TRAVEL) console.log('Preview mode is on: the date picker in the footer can fast-forward to December.');
+  if (TIME_TRAVEL) console.log(`Preview mode is on: add ?preview=2026-12-14 to the URL to pretend it's another day.`);
 });

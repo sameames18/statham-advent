@@ -1,6 +1,6 @@
 # Stathmas
 
-An advent calendar of Jason Statham action vehicles. Thirty-one doors, one for each day of December. Each door opens at midnight in the visitor's own time zone and reveals the film for that night.
+An advent calendar of Jason Statham action vehicles, dressed as a printed card calendar from about 1962. Thirty-one paper doors are hidden in a snowy village on Christmas Eve, one for each day of December. Each opens at midnight in the visitor's own time zone and shows a small painted picture of that night's film: a tin shark for *The Meg*, a honeybee on a skep for *The Beekeeper*. The calendar plays Christmas completely straight.
 
 ## The films
 
@@ -22,7 +22,7 @@ Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file ch
 
 ### Preview mode
 
-Before December every door is locked. Preview mode lets you pretend it's another date: use the controls in the footer, or add `?preview=2026-12-14` to the URL. It's on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
+Before December every door is locked. To pretend it's another date, add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. Preview mode is on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
 
 ## How it works
 
@@ -38,7 +38,14 @@ Before December every door is locked. Preview mode lets you pretend it's another
 
 The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. Visitors are identified by an anonymous cookie; there are no accounts. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
 
-**Frontend** (`public/`): plain HTML, CSS and JavaScript with no build step. Fonts are Archivo and Instrument Serif from Google Fonts.
+**Frontend** (`public/`): plain HTML, CSS and JavaScript modules with no build step.
+
+- `js/scene.js` draws the village as SVG in two compositions: a wide card for desktop and a tall one for phones, each with 31 door slots. Door numbers are scattered by composition; the church's big double door is always 24, Christmas Eve.
+- `js/doors.js` prints the front of each paper door (a lit window, a front door, a star, a parcel on the sled), and `js/emblems.js` draws the 31 film pictures behind them.
+- `js/svg.js` is the shared drawing kit. Every shape is printed twice, a flat ink plate slightly off register under a key line plate, which is where the cheap-print look comes from.
+- `js/app.js` lays the doors over the picture as HTML so they can swing open, and runs the film card, the ribbon tag, the cinema marquee, the list of doors and the glitter.
+
+Seven inks only (card, midnight, snow, fir, berry, candlelight, key), with Fraunces for numerals and titles, Libre Caslon Text for words, Yellowtail for the wordmark and Reenie Beanie for pencil notes, all from Google Fonts.
 
 **Data** lives in `data/stathmas.db`, which is created on first run and ignored by git.
 
