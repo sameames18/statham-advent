@@ -17,5 +17,6 @@ const server = createServer(createHandler(catalog, config));
 
 server.listen(config.port, () => {
   console.log(`Stathmas is running at http://localhost:${config.port}`);
+  if (!config.siteUrl) console.log('SITE_URL is not set: link previews may not show the thumbnail.');
   if (config.timeTravel) console.log('Preview mode is on: add ?preview=2026-12-14 to the URL to pretend it\'s another day. Never run a real December like this.');
 });

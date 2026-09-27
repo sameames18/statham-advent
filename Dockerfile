@@ -4,8 +4,12 @@
 # Pinned to a Node 22 minor that satisfies "engines" in package.json.
 FROM node:22.22-slim
 
+# TIME_TRAVEL=0 keeps preview mode off. That is already the default; it is set
+# here too so the image stays safe whatever the code's default becomes.
+# SITE_URL (the public address, for link previews) is set at run time.
 ENV NODE_ENV=production \
-    PORT=4747
+    PORT=4747 \
+    TIME_TRAVEL=0
 
 WORKDIR /app
 COPY package.json ./

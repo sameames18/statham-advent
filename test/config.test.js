@@ -104,3 +104,43 @@ test('opening a past year\'s door sets a Secure cookie', async () => {
   assert.equal(res.status, 200);
   assert.match(res.headers['set-cookie'][0], /^stathmas-2025=1\.0;.*; Secure$/);
 });
+
+// ---------- the site address, for link previews ----------
+
+test('SITE_URL is reduced to its origin, and anything but http(s) is refused', () => {
+  const base = { CALENDAR_SECRET: SECRET };
+  assert.equal(readConfig(base, []).siteUrl, '');
+  assert.equal(readConfig({ ...base, SITE_URL: 'https://stathmas.example.com/some/path' }, []).siteUrl, 'https://stathmas.example.com');
+  for (const bad of ['stathmas.example.com', 'javascript:alert(1)', 'ftp://example.com']) {
+    assert.throws(() => readConfig({ ...base, SITE_URL: bad }, []), (err) => err instanceof ConfigError && /SITE_URL/.test(err.message), bad);
+  }
+});
+
+test('the Vercel build writes the site address into index.html', async () => {
+  const { mkdtempSync, mkdirSync, copyFileSync, readFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const root = new URL('..', import.meta.url);
+
+  // A throwaway copy, so the real public/index.html is never touched.
+  function build(env) {
+    const dir = mkdtempSync(join(tmpdir(), 'stathmas-build-'));
+    for (const f of ['scripts/vercel-build.js', 'server/site.js', 'public/index.html']) {
+      mkdirSync(join(dir, f, '..'), { recursive: true });
+      copyFileSync(new URL(f, root), join(dir, f));
+    }
+    const run = spawnSync(process.execPath, [join(dir, 'scripts/vercel-build.js')], { env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' });
+    const html = readFileSync(join(dir, 'public/index.html'), 'utf8');
+    rmSync(dir, { recursive: true, force: true });
+    return { status: run.status, html, image: /<meta property="og:image" content="([^"]*)">/.exec(html)?.[1] };
+  }
+
+  assert.equal(build({ VERCEL_PROJECT_PRODUCTION_URL: 'stathmas.vercel.app' }).image, 'https://stathmas.vercel.app/og.jpg');
+  assert.equal(build({ VERCEL_PROJECT_PRODUCTION_URL: 'stathmas.vercel.app', SITE_URL: 'https://stathmas.example.com' }).image, 'https://stathmas.example.com/og.jpg');
+  const bare = build({});
+  assert.equal(bare.status, 0);
+  assert.equal(bare.image, '/og.jpg');
+  assert.equal(bare.html.includes('%SITE_URL%'), false);
+  assert.equal(build({ SITE_URL: 'not an address' }).status, 1);
+});

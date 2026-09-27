@@ -1,6 +1,8 @@
 // Settings from the environment, shared by the Node server (server/index.js)
 // and the Vercel function (api/index.js).
 
+import { siteOrigin } from './site.js';
+
 export class ConfigError extends Error {
   constructor(message) {
     super(message);
@@ -37,8 +39,15 @@ export function readConfig(env = process.env, argv = process.argv) {
     ? env.SECURE_COOKIES !== '0'
     : !!env.VERCEL;
 
+  // The public address, for the link-preview thumbnail (see site.js).
+  const siteUrl = siteOrigin(env.SITE_URL);
+  if (siteUrl === null) {
+    throw new ConfigError(`SITE_URL must be an http(s) address like https://stathmas.example.com, not "${env.SITE_URL}".`);
+  }
+
   return {
     port: Number(env.PORT || 4747),
+    siteUrl,
     defaultTz: env.DEFAULT_TZ || 'America/Los_Angeles',
     timeTravel,
     secret,

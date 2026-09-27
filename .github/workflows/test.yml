@@ -57,5 +57,8 @@ jobs:
           ! grep -q ERROR build.log
           test -f .vercel/output/functions/api/index.func/server/data/films.json
           test ! -e .vercel/output/functions/api/index.func/public
+          grep -q 'og:image" content="https://stathmas.example.com/og.jpg"' .vercel/output/static/index.html
         env:
           VERCEL_TELEMETRY_DISABLED: '1'
+          # As Vercel would provide it, so the link-preview address is checked too.
+          VERCEL_PROJECT_PRODUCTION_URL: stathmas.example.com

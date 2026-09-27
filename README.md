@@ -37,6 +37,7 @@ The server sends its files with `ETag` and `Last-Modified` validators and `Cache
 | `CALENDAR_SECRET` | none; required unless previewing | Decides every year's draw. Keep it secret and keep it the same all season. |
 | `TIME_TRAVEL` | off | `1` turns preview mode on. Never on for a real December. `npm run dev` turns it on with `--preview` instead. |
 | `SECURE_COOKIES` | on for Vercel, off elsewhere | Marks the door cookies HTTPS-only. `1` or `0` overrides. |
+| `SITE_URL` | none | The public address, e.g. `https://stathmas.example.com`, so link previews can find the thumbnail (see [Link previews](#link-previews)). On Vercel the production domain is used if this is unset. |
 | `DEFAULT_TZ` | `America/Los_Angeles` | The time zone used when a browser doesn't send its own. |
 | `PORT` | `4747` | The Node server's port. Not used on Vercel. |
 
@@ -97,7 +98,7 @@ Seven inks only (card, midnight, snow, fir, berry, candlelight, key), with Fraun
 
 ## Deploying to Vercel
 
-The repository is set up for Vercel as it stands: `public/` is served as the static site, and `api/index.js` is a single function that answers every `/api/*` request (`vercel.json` rewrites them to it). There is no build step and nothing to install.
+The repository is set up for Vercel as it stands: `public/` is served as the static site, and `api/index.js` is a single function that answers every `/api/*` request (`vercel.json` rewrites them to it). The only build step writes the site's address into the link-preview tag (see [Link previews](#link-previews)), and there is nothing to install.
 
 1. Import the repository in Vercel (**Add New… → Project**). Leave the framework preset as **Other**; `vercel.json` sets the output directory to `public`.
 2. Under **Settings → Environment Variables**, add `CALENDAR_SECRET` for the **Production** environment. Generate it with `openssl rand -hex 32`, and keep a copy somewhere safe: if it's lost, the next deploy draws a different calendar.
@@ -115,7 +116,7 @@ A few things worth knowing:
 
 The site is also one Node process with no dependencies and no state, so a small VPS with Docker and a reverse proxy is enough.
 
-The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/` and `public/`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. It has a `HEALTHCHECK` that asks `/api/health` every 30 seconds. There is no volume, because there is nothing to keep.
+The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/` and `public/`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. It sets `TIME_TRAVEL=0` as well, so the image stays safe whatever the code's default becomes, and has a `HEALTHCHECK` that asks `/api/health` every 30 seconds. There is no volume, because there is nothing to keep.
 
 ```bash
 docker build -t stathmas .
@@ -139,7 +140,18 @@ stathmas.example.com {
 }
 ```
 
-Once HTTPS is in place, set `SECURE_COOKIES=1`, so browsers only send the door cookies over HTTPS. Don't set it without HTTPS: a browser drops a `Secure` cookie that arrives over `http://`, and no door would stay open.
+Once HTTPS is in place, set `SECURE_COOKIES=1`, so browsers only send the door cookies over HTTPS. Don't set it without HTTPS: a browser drops a `Secure` cookie that arrives over `http://`, and no door would stay open. Set `SITE_URL` to the public address too, for link previews.
+
+## Link previews
+
+When the link is pasted into Slack, iMessage, Discord, X and the like, the preview shows `public/og.jpg`, a square 800×800 picture of Statham in a Santa hat, beside the title and description. The Open Graph tags in the head of `public/index.html` point at it, and `twitter:card` is `summary`, which asks for the small square rather than a wide banner. X and Discord honour that; other apps choose their own layout, and a few may show it larger or crop it.
+
+The crawlers that build these previews want the image's absolute URL, and only the deployment knows the domain, so `index.html` carries a `%SITE_URL%` placeholder (`server/site.js`):
+
+- **The Node server** fills it in from `SITE_URL` as it sends `index.html`, and folds it into the page's ETag so a changed address is never answered with a stale 304. Unset, the tag is root-relative (`/og.jpg`), which is fine locally but which not every crawler resolves, and the server says so at startup. A value that isn't an http(s) address stops the server with an error.
+- **On Vercel**, the page is served straight from `public/`, so `scripts/vercel-build.js` (the `buildCommand` in `vercel.json`) fills it in once, at build time. It uses `SITE_URL` if you set it, and otherwise the project's production domain, which Vercel provides as `VERCEL_PROJECT_PRODUCTION_URL`. Branch deployments therefore point at the production thumbnail, which is the same picture. If you add a custom domain later, redeploy (or set `SITE_URL`) so the tag follows it.
+
+Previews are cached by each app, so after changing the image check it with an Open Graph preview checker, which fetches the page fresh, rather than by pasting the link again. To replace the picture, overwrite `public/og.jpg` with another square JPEG, keep it well under 300 KB (WhatsApp is widely reported to skip larger ones), and judge it shrunk to about 100 pixels, the size it's seen at.
 
 ## Before December
 

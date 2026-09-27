@@ -1,9 +1,11 @@
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   DAYS_IN_DECEMBER, dateIn, isUnlocked, isValidTimeZone, parseDate, seasonYear,
 } from './calendar.js';
+import { fillSiteUrl } from './site.js';
 import {
   NONE, isOpened, isWatched, marksCookie, readMarks, withOpened, withWatched,
 } from './marks.js';
@@ -21,6 +23,7 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.jpg': 'image/jpeg',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
   '.ico': 'image/x-icon',
@@ -113,6 +116,10 @@ export function createHandler(catalog, {
   timeTravel = false,
   // Mark the door cookies Secure (HTTPS only).
   secureCookies = false,
+  // The site's public origin, e.g. https://stathmas.example.com, with no
+  // trailing slash, for the thumbnail's absolute URL (see site.js). Empty
+  // leaves it root-relative.
+  siteUrl = '',
   // Serve public/ as well as the API. Vercel serves the files itself.
   serveStatic = true,
   publicDir = DEFAULT_PUBLIC_DIR,
@@ -120,6 +127,10 @@ export function createHandler(catalog, {
   clock = () => new Date(),
 } = {}) {
   const publicRoot = normalize(publicDir.endsWith(sep) ? publicDir : publicDir + sep);
+  // index.html is the one templated file: %SITE_URL% is filled in on the way
+  // out. The origin goes into its ETag, so a changed SITE_URL isn't a 304.
+  const indexFile = normalize(join(publicDir, 'index.html'));
+  const siteTag = siteUrl ? '-' + createHash('sha1').update(siteUrl).digest('hex').slice(0, 8) : '';
 
   // "Today", in the visitor's own time zone so doors open at their midnight.
   function today(req) {
@@ -208,7 +219,8 @@ export function createHandler(catalog, {
     }
     if (!info.isFile()) return send(res, 404, { error: 'Not found' });
 
-    const etag = `W/"${info.size}-${Math.floor(info.mtimeMs).toString(16)}"`;
+    const templated = file === indexFile;
+    const etag = `W/"${info.size}-${Math.floor(info.mtimeMs).toString(16)}${templated ? siteTag : ''}"`;
     const headers = {
       ...SECURITY_HEADERS,
       'Cache-Control': 'no-cache',
@@ -221,7 +233,7 @@ export function createHandler(catalog, {
     }
 
     headers['Content-Type'] = TYPES[extname(file)] ?? 'application/octet-stream';
-    if (req.method === 'HEAD') {
+    if (req.method === 'HEAD' && !templated) {
       res.writeHead(200, { ...headers, 'Content-Length': info.size });
       return res.end();
     }
@@ -230,6 +242,11 @@ export function createHandler(catalog, {
       body = await readFile(file);
     } catch {
       return send(res, 404, { error: 'Not found' });
+    }
+    if (templated) body = Buffer.from(fillSiteUrl(body.toString('utf8'), siteUrl));
+    if (req.method === 'HEAD') {
+      res.writeHead(200, { ...headers, 'Content-Length': body.length });
+      return res.end();
     }
     res.writeHead(200, { ...headers, 'Content-Length': body.length });
     res.end(body);
