@@ -17,7 +17,7 @@
     .films { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0 40px; margin: 0; padding: 0; list-style: none; }
     .film-entry { display: grid; grid-template-columns: 104px 1fr; gap: 16px; padding: 20px 0; border-top: 1px dotted rgba(42, 33, 28, .45); }
     .film-entry .pic { width: 104px; height: 104px; background: radial-gradient(closest-side, rgba(232, 176, 74, .75), rgba(232, 176, 74, .12) 75%, transparent); }
-    .film-entry .emblem-svg { width: 100%; height: 100%; --lw: 1.3px; }
+    .film-entry .emblem-image { display: block; width: 100%; height: 100%; object-fit: contain; }
     .film-entry h2 { margin: 0; font-family: var(--display); font-weight: 750; font-variation-settings: 'SOFT' 100, 'WONK' 1, 'opsz' 48; font-size: 21px; line-height: 1.1; }
     .film-entry .meta { margin: 4px 0 0; font-size: 13px; }
     .film-entry .as { margin: 1px 0 0; font-size: 13px; font-style: italic; }
@@ -33,7 +33,7 @@
     <ol class="films" data-films></ol>
   </main>
   <script type="module">
-    import { emblemSvg } from './js/emblems.js';
+    import { emblemImage } from './js/emblems.js';
     const list = document.querySelector('[data-films]');
     const res = await fetch('/api/catalog');
     if (!res.ok) {
@@ -43,7 +43,7 @@
       for (const f of films) {
         const li = document.createElement('li');
         li.className = 'film-entry';
-        li.innerHTML = `<div class="pic">${emblemSvg(f.slug)}</div><div><h2></h2><p class="meta"></p><p class="as"></p><p class="logline"></p><p class="note"></p></div>`;
+        li.innerHTML = `<div class="pic">${emblemImage(f.slug)}</div><div><h2></h2><p class="meta"></p><p class="as"></p><p class="logline"></p><p class="note"></p></div>`;
         li.querySelector('h2').textContent = f.title;
         li.querySelector('.meta').textContent = `${f.year} · Directed by ${f.director} · ${f.runtime} minutes`;
         li.querySelector('.as').textContent = `Jason Statham as ${f.character}`;
