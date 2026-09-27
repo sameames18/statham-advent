@@ -6,13 +6,14 @@ import { INK, rect, circ, ellipse, poly, path, line, star, offset } from './svg.
 const numeral = (x, y, size, n, fill, halo) =>
   `<text class="num" x="${x}" y="${y}" font-size="${size}" text-anchor="middle" fill="${fill}"${halo ? ` stroke="${halo}" stroke-width="${size * 0.14}" paint-order="stroke" stroke-linejoin="round"` : ''}>${n}</text>`;
 
-// A full moon filling the round door, a few craters printed in card.
+// A full moon filling the round door. The craters are a light screen of key
+// over the candlelight, the way a printer got a deeper shade from the same inks.
 function fullMoon(cx, cy, r) {
   return circ(cx, cy, r, INK.candle)
-    + circ(cx - r * 0.5, cy - r * 0.48, r * 0.17, INK.card, undefined, { opacity: 0.75 })
-    + circ(cx + r * 0.66, cy - r * 0.2, r * 0.12, INK.card, undefined, { opacity: 0.75 })
-    + circ(cx - r * 0.6, cy + r * 0.45, r * 0.12, INK.card, undefined, { opacity: 0.75 })
-    + circ(cx + r * 0.42, cy + r * 0.66, r * 0.09, INK.card, undefined, { opacity: 0.75 });
+    + circ(cx - r * 0.5, cy - r * 0.48, r * 0.17, INK.key, 'nl', { opacity: 0.16 })
+    + circ(cx + r * 0.66, cy - r * 0.2, r * 0.12, INK.key, 'nl', { opacity: 0.16 })
+    + circ(cx - r * 0.6, cy + r * 0.45, r * 0.12, INK.key, 'nl', { opacity: 0.16 })
+    + circ(cx + r * 0.42, cy + r * 0.66, r * 0.09, INK.key, 'nl', { opacity: 0.16 });
 }
 
 const ribbonFor = { [INK.berry]: INK.candle, [INK.fir]: INK.berry, [INK.candle]: INK.berry };
