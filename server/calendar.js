@@ -1,12 +1,21 @@
 // Pure calendar logic: no I/O, so it can be tested directly.
 
+import { createHmac } from 'node:crypto';
+
 export const DAYS_IN_DECEMBER = 31;
+
+// The seed for a year's draw. Nothing is stored: every server instance
+// derives the same seed from the secret, so they all agree on the calendar,
+// and without the secret nobody can work out the doors still to come.
+export function drawSeed(secret, year) {
+  return createHmac('sha256', secret).update(`stathmas:${year}`).digest().readUInt32BE(0) >>> 1;
+}
 
 // Small seeded PRNG (mulberry32). Same seed, same calendar.
 // public/js/svg.js has its own copy for drawing the picture. They are kept
-// separate on purpose: this one turns a year's stored seed into its draw, so
-// any change here changes what a reshuffle produces. The picture's copy is
-// free to change; this one is not.
+// separate on purpose: this one turns a year's seed into its draw, so any
+// change here reshuffles every calendar, the live one included. The
+// picture's copy is free to change; this one is not.
 export function rng(seed) {
   let a = seed >>> 0;
   return () => {

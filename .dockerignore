@@ -1,18 +1,20 @@
-# Only package.json, server/, public/ and scripts/reshuffle.js go into the image
-# (see the Dockerfile's COPY lines); this keeps the rest out of the build context.
+# Only package.json, server/ and public/ go into the image (see the
+# Dockerfile's COPY lines); this keeps the rest out of the build context.
 .git
 .gitattributes
 .gitignore
 .claude
 .dockerignore
+.env
+.vercel
 Dockerfile
 docker-compose.yml
-data
+vercel.json
+api
 docs
+scripts
 test
 node_modules
-scripts/fetch_films.py
-scripts/films_raw.json
 __pycache__
 *.md
 *.log

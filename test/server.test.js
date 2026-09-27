@@ -3,18 +3,17 @@ import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
 import { connect } from 'node:net';
 import { once } from 'node:events';
-import { openDb } from '../server/db.js';
 import { statSync } from 'node:fs';
 import { createHandler } from '../server/app.js';
+import { loadCatalog } from '../server/catalog.js';
 
-let store;
+const catalog = loadCatalog({ secret: 'a test secret, not the real one' });
 let server;
 let port;
 let base;
 
 before(async () => {
-  store = openDb(':memory:');
-  server = createServer(createHandler(store, { timeTravel: true }));
+  server = createServer(createHandler(catalog, { timeTravel: true }));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   port = server.address().port;
@@ -24,7 +23,6 @@ before(async () => {
 after(async () => {
   server.closeAllConnections();
   server.close();
-  store.close();
   await once(server, 'close');
 });
 
@@ -87,20 +85,21 @@ test('every response carries the security headers', async () => {
   }
 });
 
-test('the visitor cookie is Secure only when the handler is told to', async () => {
-  const plain = await get('/api/health');
-  assert.match(plain.headers['set-cookie'][0], /^visitor=[0-9a-f-]{36}; Path=\/; Max-Age=31536000; HttpOnly; SameSite=Lax$/);
+test('the door cookie is Secure only when the handler is told to', async () => {
+  const openOne = (p) => new Promise((resolve, reject) => {
+    request({ host: '127.0.0.1', port: p, path: '/api/doors/1/open', method: 'POST', headers: { 'X-Preview-Date': '2026-12-14' } }, (r) => {
+      r.resume();
+      r.on('end', () => resolve(r));
+    }).on('error', reject).end();
+  });
+  const plain = await openOne(port);
+  assert.match(plain.headers['set-cookie'][0], /^stathmas-2026=1\.0; Path=\/; Max-Age=34560000; HttpOnly; SameSite=Lax$/);
 
-  const secure = createServer(createHandler(store, { timeTravel: true, secureCookies: true }));
+  const secure = createServer(createHandler(catalog, { timeTravel: true, secureCookies: true }));
   secure.listen(0, '127.0.0.1');
   await once(secure, 'listening');
   try {
-    const res = await new Promise((resolve, reject) => {
-      request({ host: '127.0.0.1', port: secure.address().port, path: '/api/health' }, (r) => {
-        r.resume();
-        r.on('end', () => resolve(r));
-      }).on('error', reject).end();
-    });
+    const res = await openOne(secure.address().port);
     assert.match(res.headers['set-cookie'][0], /; SameSite=Lax; Secure$/);
   } finally {
     secure.close();
@@ -266,20 +265,64 @@ test('the calendar carries no film data for locked or unopened doors', async () 
   assert.equal(count(res.json.doors, 'isToday'), 1);
 });
 
-test('a visitor cookie is issued once and honoured on the next request', async () => {
-  const first = await call('/api/calendar');
-  const set = first.headers['set-cookie'];
-  assert.equal(set?.length, 1);
-  assert.match(set[0], /^visitor=[0-9a-f-]{36}; Path=\/; Max-Age=31536000; HttpOnly; SameSite=Lax$/);
-  const cookie = set[0].split(';')[0];
+test('reading never sets a cookie; only opening, marking and reset do', async () => {
+  for (const path of ['/api/health', '/api/calendar', '/api/doors/7', '/api/doors/20']) {
+    const res = await call(path, { headers: { 'X-Preview-Date': PREVIEW } });
+    assert.equal(res.headers['set-cookie'], undefined, path);
+  }
+  // A refused open writes nothing either.
+  const early = await call('/api/doors/20/open', { method: 'POST', headers: { 'X-Preview-Date': PREVIEW } });
+  assert.equal(early.status, 403);
+  assert.equal(early.headers['set-cookie'], undefined);
+});
 
-  const second = await call('/api/calendar', { headers: { Cookie: cookie } });
-  assert.equal(second.status, 200);
-  assert.equal(second.headers['set-cookie'], undefined, 'a known visitor is not issued another cookie');
+test('the doors live in the cookie: its marks are read back, junk is ignored', async () => {
+  const cal = (cookie) => call('/api/calendar', { headers: { 'X-Preview-Date': PREVIEW, Cookie: cookie } });
+  // Doors 1 and 3 open (0b101), door 3 seen (0b100).
+  let res = await cal('stathmas-2026=5.4');
+  assert.deepEqual(res.json.doors.filter((d) => d.opened).map((d) => d.day), [1, 3]);
+  assert.deepEqual(res.json.doors.filter((d) => d.watched).map((d) => d.day), [3]);
 
-  // A cookie that is not a visitor id is ignored and replaced.
-  const bogus = await call('/api/calendar', { headers: { Cookie: 'visitor=not-a-uuid' } });
-  assert.equal(bogus.headers['set-cookie']?.length, 1);
+  // "Seen" without "opened" is dropped, and so is anything unparseable.
+  res = await cal('stathmas-2026=1.6');
+  assert.deepEqual(res.json.doors.filter((d) => d.watched).map((d) => d.day), []);
+  for (const junk of ['stathmas-2026=zz.1', 'stathmas-2026=', 'stathmas-2026=123456789.0', 'stathmas-2026']) {
+    res = await cal(junk);
+    assert.equal(res.status, 200, junk);
+    assert.equal(count(res.json.doors, 'opened'), 0, junk);
+  }
+  // Another year's cookie doesn't count for this one.
+  res = await cal('stathmas-2025=7fffffff.0');
+  assert.equal(count(res.json.doors, 'opened'), 0);
+});
+
+test('a forged cookie cannot open a door before its date', async () => {
+  // Every bit set: all 31 doors claim to be open, but it is only the 14th.
+  const cookie = 'stathmas-2026=7fffffff.7fffffff';
+  const cal = await call('/api/calendar', { headers: { 'X-Preview-Date': PREVIEW, Cookie: cookie } });
+  assert.deepEqual(cal.json.doors.filter((d) => d.opened).map((d) => d.day), Array.from({ length: 14 }, (_, i) => i + 1));
+  assert.ok(cal.json.doors.slice(14).every((d) => d.film === null));
+  const door = await call('/api/doors/20', { headers: { 'X-Preview-Date': PREVIEW, Cookie: cookie } });
+  assert.equal(door.status, 403);
+  assert.equal(door.raw.includes('"title"'), false);
+});
+
+test('a preview date outside 2000-2100 is ignored, like any malformed one', async () => {
+  for (const date of ['9999-12-01', '0001-12-01', '1999-12-31', '2101-01-01']) {
+    const res = await call('/api/calendar', { headers: { 'X-Preview-Date': date } });
+    assert.equal(res.json.today.preview, false, date);
+  }
+  const edge = await call('/api/calendar', { headers: { 'X-Preview-Date': '2100-12-31' } });
+  assert.equal(edge.json.today.preview, true);
+});
+
+test('the same secret always draws the same calendar; a different one does not', async () => {
+  const me = visitor();
+  const titles = [];
+  for (const day of [1, 2, 3]) titles.push((await me(`/api/doors/${day}/open`, { method: 'POST' })).json.film.slug);
+  assert.deepEqual(titles, [1, 2, 3].map((d) => catalog.day(2026, d).film.slug));
+  const other = loadCatalog({ secret: 'some other secret entirely' });
+  assert.notDeepEqual(other.days(2026).map((d) => d.film.slug), catalog.days(2026).map((d) => d.film.slug));
 });
 
 test('a locked door refuses GET and POST open with 403', async () => {
@@ -403,8 +446,9 @@ test('unknown doors and routes are 404', async () => {
 });
 
 test('static paths cannot climb out of public/', async () => {
-  const source = 'DatabaseSync';
-  for (const path of ['/../server/db.js', '/%2e%2e/server/db.js', '/..%2fserver/db.js', '/..%2f..%2fserver/db.js', '/%2e%2e%2fserver%2fdb.js']) {
+  // A file that exists outside public/, and a string only it contains.
+  const source = 'export function createHandler';
+  for (const path of ['/../server/app.js', '/%2e%2e/server/app.js', '/..%2fserver/app.js', '/..%2f..%2fserver/app.js', '/%2e%2e%2fserver%2fapp.js']) {
     const res = await call(path);
     assert.ok([403, 404].includes(res.status), `${path} answered ${res.status}`);
     assert.equal(res.raw.includes(source), false, `${path} served the file`);
@@ -412,18 +456,18 @@ test('static paths cannot climb out of public/', async () => {
   // The URL parser folds a plain `..` away, so those two come back as a
   // missing file inside public/. An encoded slash survives parsing and is
   // the one that reaches the directory check, which refuses it outright.
-  assert.equal((await call('/..%2f..%2fserver/db.js')).status, 403);
+  assert.equal((await call('/..%2fserver/app.js')).status, 403);
 });
 
 test('/api/catalog lists every film while preview is on', async () => {
   const res = await call('/api/catalog');
   assert.equal(res.status, 200);
-  assert.equal(res.json.films.length, store.films().length);
+  assert.equal(res.json.films.length, catalog.films().length);
   assert.ok(res.json.films.every((f) => f.title && !('id' in f)));
 });
 
 test('with preview off, /api/catalog is 404 and X-Preview-Date is ignored', async () => {
-  const strict = createServer(createHandler(store, { timeTravel: false }));
+  const strict = createServer(createHandler(catalog, { timeTravel: false }));
   strict.listen(0, '127.0.0.1');
   await once(strict, 'listening');
   const on = () => strict.address().port;
@@ -444,5 +488,24 @@ test('with preview off, /api/catalog is 404 and X-Preview-Date is ignored', asyn
     strict.closeAllConnections();
     strict.close();
     await once(strict, 'close');
+  }
+});
+
+test('with serveStatic off (as on Vercel), only the API answers', async () => {
+  const apiOnly = createServer(createHandler(catalog, { timeTravel: true, serveStatic: false }));
+  apiOnly.listen(0, '127.0.0.1');
+  await once(apiOnly, 'listening');
+  const on = () => apiOnly.address().port;
+  try {
+    assert.equal((await call('/api/health', { on })).status, 200);
+    for (const path of ['/', '/index.html', '/js/app.js']) {
+      const res = await call(path, { on });
+      assert.equal(res.status, 404, path);
+      assert.deepEqual(res.json, { error: 'Not found' });
+    }
+  } finally {
+    apiOnly.closeAllConnections();
+    apiOnly.close();
+    await once(apiOnly, 'close');
   }
 });

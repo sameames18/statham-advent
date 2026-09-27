@@ -2,6 +2,25 @@
 
 Reviewed at commit `53e0776` on 2026-09-27, one day after the design direction was written and roughly nine weeks before the first door opens.
 
+## Status after the follow-up change (same day)
+
+The follow-up removed the database. Each year's draw is now worked out from the year and `CALENDAR_SECRET` (`server/catalog.js`, `drawSeed` in `server/calendar.js`), and each visitor's doors live in a per-year cookie (`server/marks.js`). That was chosen so the site can run on Vercel, whose functions have no persistent disk, and it settles several findings by removing the code they were about. The findings below are kept as written, for the record.
+
+| ID | Now |
+| --- | --- |
+| DB-1 | Moot: there is no database. |
+| SEC-1 | Fixed: preview is off unless `TIME_TRAVEL=1` or `--preview`, in the code, the image and on Vercel. |
+| SEC-2 | Fixed: the API writes nothing on the server (the only state is the visitor's own cookie), and preview dates outside 2000–2100 are ignored. |
+| DB-2 | Moot: nothing is drawn early and stored. New trade-off: adding or removing a film now redraws every year, so `films.json` must be left alone in December (README, "Before December"). |
+| DB-3 | Moot: past calendars no longer pin films. |
+| TEST-1 | Addressed, and the original finding overstated the gap. The one smoke test already ran about 70% of `app.js`'s lines (67% of its code characters); what it lacked was assertions, since it checked one outcome. Now the page's text logic is in `public/js/words.js` with unit tests, and 24 browser tests cover every interaction. Together they run every line of `app.js` and 98% of its code characters, and the last test fails if that drops. |
+| OPS-1 | Moot: `scripts/reshuffle.js` is gone. |
+| FE-2 | Fixed: a second tap on "Seen it" now undoes the first (taps are applied at once and sent in order), and the reset and delayed-card paths no longer leave unhandled rejections. |
+| CI-1 | Partly: `permissions: contents: read`, Node 24 in the matrix, and an offline `vercel build` job were added. Still open: a Docker build-and-boot job, and a linter. |
+| DEP-1, SEC-3, API-1, FE-1, DEP-2, PERF-1, API-2, DOC-1 | Unchanged. DEP-1 applies to Docker only. |
+
+New risks the change brings, for a future review. **The secret is now the one thing that keeps future doors secret.** It must be long (the server refuses one under 16 characters) and must never be given to a deployment with preview mode on. **A visitor's doors are per browser.** That was already true in practice, since the old visitor ID was also a cookie, but it is now also true if the server is rebuilt from scratch. **A secret shorter than about 16 random characters could in principle be brute-forced** by someone who knows the films behind the doors already opened; the length check is the mitigation.
+
 ## How this review was done, and how to read it
 
 Every source file was read in full: the server (`server/`), the frontend (`public/`), the tests, the scripts, the Dockerfile, the compose file, the CI workflow, the README and `docs/design.md`. The test suite was run (57 tests, all passing, about 0.6 s) with Node's built-in coverage. Then two copies of the server were started against scratch databases and probed with `curl` to confirm or reject each suspected problem. Wherever a finding says **Verified**, the behaviour was reproduced and the command or output is quoted. Wherever it says **Reasoned**, it comes from reading the code and was not reproduced.

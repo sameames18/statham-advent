@@ -1,35 +1,21 @@
 import { createServer } from 'node:http';
-import { FilmInUseError, openDb } from './db.js';
 import { createHandler } from './app.js';
+import { loadCatalog } from './catalog.js';
+import { ConfigError, readConfig } from './config.js';
 
-const PORT = Number(process.env.PORT ?? 4747);
-const DEFAULT_TZ = process.env.DEFAULT_TZ ?? 'America/Los_Angeles';
-// Preview mode lets the client pretend it's a different date (?preview= in the
-// page URL). Handy outside December; switch it off (TIME_TRAVEL=0) for a real one.
-const TIME_TRAVEL = process.env.TIME_TRAVEL !== '0';
-// Behind a reverse proxy that terminates HTTPS, set SECURE_COOKIES=1 so the
-// visitor cookie is only ever sent over HTTPS. Off by default so plain-HTTP
-// local development keeps working (a Secure cookie is dropped over http://).
-const SECURE_COOKIES = !!process.env.SECURE_COOKIES && process.env.SECURE_COOKIES !== '0';
-
-// The catalog is synced from films.json on every start. A film can't leave the
-// JSON while a stored calendar still shows it, so stop with the fix spelled out.
-function openCatalog() {
-  try {
-    return openDb();
-  } catch (err) {
-    if (!(err instanceof FilmInUseError)) throw err;
-    console.error(`Stathmas can't start: ${err.message}`);
-    process.exit(1);
-  }
+let config;
+try {
+  config = readConfig();
+} catch (err) {
+  if (!(err instanceof ConfigError)) throw err;
+  console.error(`Stathmas can't start: ${err.message}`);
+  process.exit(1);
 }
 
-const store = openCatalog();
-const server = createServer(createHandler(store, {
-  defaultTz: DEFAULT_TZ, timeTravel: TIME_TRAVEL, secureCookies: SECURE_COOKIES,
-}));
+const catalog = loadCatalog({ secret: config.secret });
+const server = createServer(createHandler(catalog, config));
 
-server.listen(PORT, () => {
-  console.log(`Stathmas is running at http://localhost:${PORT}`);
-  if (TIME_TRAVEL) console.log(`Preview mode is on: add ?preview=2026-12-14 to the URL to pretend it's another day.`);
+server.listen(config.port, () => {
+  console.log(`Stathmas is running at http://localhost:${config.port}`);
+  if (config.timeTravel) console.log('Preview mode is on: add ?preview=2026-12-14 to the URL to pretend it\'s another day. Never run a real December like this.');
 });

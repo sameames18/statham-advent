@@ -8,21 +8,37 @@ The design direction, and the reasoning behind it, is in [docs/design.md](docs/d
 
 Thirty-one films, one per door. Twenty-eight are every film where Statham is the lead in an action or crime picture, from *The Transporter* (2002) to *Mutiny* (2026). Three more are there by choice: *Lock, Stock and Two Smoking Barrels* and *Snatch*, the Guy Ritchie films that started it, and *The Expendables* as the one ensemble wildcard. The rest of the ensembles and supporting turns are left out: the *Fast & Furious* films, *Hobbs & Shaw*, the *Expendables* sequels, *The Italian Job*, *Cellular*, *Spy*, *13* and the rest.
 
-The order is random and drawn once per year, the first time that year's calendar is requested. After that it's stored, so every visitor gets the same calendar. (If the catalog ever has fewer films than days, the spare days become encores of films already shown.)
+Facts (director, runtime, release year, character) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json`, and it is checked when the server starts: a film missing a field, or two films with the same slug, stop it with the problem named.
 
-Facts (director, runtime, release year, character) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json`, and the database is synced to it each time the server starts: edited entries are updated, new ones added, and any film no longer in the JSON is deleted. A film can't be deleted while a stored calendar still has it behind a door; the server refuses to start and names the film and the year, and you reshuffle that year first (see [Redrawing the calendar](#redrawing-the-calendar)) or put the film back.
+**The order** is random, different every year, and the same for every visitor. Nothing stores it. It is worked out from the year and a secret, `CALENDAR_SECRET`, so every copy of the server (and every Vercel function instance) arrives at the same calendar, and without the secret nobody can work out the doors still to come, even with this source code in hand. Three things redraw a year's calendar: changing the secret, adding or removing a film, and changing the draw code in `server/calendar.js`. Reordering `films.json` or editing a film's text does not. Do any of the three before December, never during it: visitors' opened doors are remembered by day number, so a redraw mid-month would put their marks on the wrong films. (If the catalog ever has fewer films than days, the spare days become encores of films already shown.)
 
 ## Running it
 
 Needs Node 22.13 or newer. There are no dependencies to install.
 
 ```bash
-node server/index.js
+npm run dev
 ```
 
-Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file changes) and `npm test` work too if npm is installed.
+Then open http://localhost:4747. That runs the server in preview mode (see below), restarting it when files change, and it needs no secret. To run it the way it runs for real, with preview off:
 
-The server sends its files with `ETag` and `Last-Modified` validators and `Cache-Control: no-cache`, so a returning browser asks whether each file has changed and gets a bodiless 304 when it hasn't, while an edit is picked up on the very next load after a deploy. It does not compress anything: if you put it on the internet, run it behind a reverse proxy (Caddy, nginx) and let the proxy do gzip or brotli.
+```bash
+CALENDAR_SECRET=$(openssl rand -hex 32) npm start
+```
+
+Without `CALENDAR_SECRET` the server refuses to start, and it refuses a secret shorter than 16 characters. Generate one once and keep it for the whole season.
+
+The server sends its files with `ETag` and `Last-Modified` validators and `Cache-Control: no-cache`, so a returning browser asks whether each file has changed and gets a bodiless 304 when it hasn't, while an edit is picked up on the very next load after a deploy. It does not compress anything: on Vercel the platform does that, and behind Docker a reverse proxy should.
+
+### Settings
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `CALENDAR_SECRET` | none; required unless previewing | Decides every year's draw. Keep it secret and keep it the same all season. |
+| `TIME_TRAVEL` | off | `1` turns preview mode on. Never on for a real December. `npm run dev` turns it on with `--preview` instead. |
+| `SECURE_COOKIES` | on for Vercel, off elsewhere | Marks the door cookies HTTPS-only. `1` or `0` overrides. |
+| `DEFAULT_TZ` | `America/Los_Angeles` | The time zone used when a browser doesn't send its own. |
+| `PORT` | `4747` | The Node server's port. Not used on Vercel. |
 
 ### Tests
 
@@ -30,9 +46,9 @@ The server sends its files with `ETag` and `Last-Modified` validators and `Cache
 npm test
 ```
 
-Unit tests for the calendar logic, the drawing modules, the database layer and the HTTP API, all on Node's built-in test runner with nothing to install. They run on every push and pull request (`.github/workflows/test.yml`).
+Unit tests for the calendar logic, the catalog and the draw, the door cookie, the settings, the page's wording, the drawing modules and the HTTP API, plus the Vercel function, all on Node's built-in test runner with nothing to install. They run on every push and pull request (`.github/workflows/test.yml`), on Node 22.13, 22 and 24.
 
-There is also a browser smoke test that drives the real page in headless Chromium. It needs the one development dependency, Playwright, and a browser, so it is a separate script:
+The page itself (`public/js/app.js`: opening doors, the not-yet note, "Seen it", the list of doors, reset, preview, the phone layout, the keyboard, reduced motion and the glitter) is tested in headless Chromium. That needs the one development dependency, Playwright, and a browser, so it is a separate script:
 
 ```bash
 npm install
@@ -40,15 +56,19 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Playwright is pinned to the version whose Chromium build the review environment already has, so bump it deliberately.
+The last browser test reports how much of the page's scripts the others exercised and fails if that drops. Playwright is pinned to the version whose Chromium build the review environment already has, so bump it deliberately.
+
+CI also runs an offline `vercel build` against a stand-in project, so a broken `vercel.json` fails there rather than on deploy.
 
 ### Preview mode
 
-Before December every door is locked. To pretend it's another date, add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. While preview mode is on, http://localhost:4747/catalog.html shows every film at once, with its picture, logline and note, in release order. It gives the whole calendar away, so it's switched off along with preview mode. Preview mode is on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
+Before December every door is locked. With preview mode on, the page can pretend it's another date: add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link, and http://localhost:4747/catalog.html shows every film at once, with its picture, logline and note, in release order.
+
+Preview mode gives the whole calendar away, so it is **off unless asked for**: `npm run dev` turns it on, and so does `TIME_TRAVEL=1`. With it off, preview dates are ignored and `/catalog.html` has nothing to show. If the server prints "Preview mode is on" at startup, it is on.
 
 ## How it works
 
-**Backend** (`server/`): a plain Node HTTP server using the built-in `node:sqlite`. It serves the site and a small JSON API:
+**Backend** (`server/`): a plain Node HTTP server with no database. It serves the site and a small JSON API:
 
 | Route | What it does |
 | --- | --- |
@@ -56,71 +76,61 @@ Before December every door is locked. To pretend it's another date, add `?previe
 | `GET /api/doors/:day` | Full details for a door this visitor has opened. |
 | `POST /api/doors/:day/open` | Opens a door. Refused with 403 before its date. |
 | `POST /api/doors/:day/watched` | Marks a film watched (`{"watched": false}` to undo). |
-| `POST /api/reset` | Closes all of this visitor's doors. |
+| `POST /api/reset` | Closes all of this visitor's doors for the year. |
 | `GET /api/catalog` | Every film in release order. Preview mode only. |
 | `GET /api/health` | Liveness check for uptime monitors and the Docker healthcheck; answers `{"ok": true}`. |
 
-The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. Visitors are identified by an anonymous cookie; there are no accounts. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
+The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
 
-**The season** runs from the 1st of December to Twelfth Night, the 6th of January, when the decorations come down. Until then the API keeps serving the December just gone, with all 31 doors unlocked, so a visitor who missed a night can still catch up and the ribbon tag reads "That was Stathmas 2026". From the 7th of January the site switches to the coming December: every door is locked, the tag counts down to the 1st, and that year's calendar is drawn the first time it's requested. `seasonYear` in `server/calendar.js` makes the choice; the date is `SEASON_END` next to it. `?year=` on the API still asks for any year explicitly.
+**Each visitor's doors** live in their own browser, in one cookie per year: `stathmas-2026=<opened>.<seen>`, two bitmasks in hex, one bit per day (`server/marks.js`). There are no accounts and nothing about a visitor is stored on the server. The cookie needs no protection from its owner: the server hands out a film only once its date has come, whatever the cookie claims, so a forged "opened" mark shows nothing its owner couldn't open anyway. A visitor who clears their cookies, or switches browser, starts with every door closed.
+
+**The season** runs from the 1st of December to Twelfth Night, the 6th of January, when the decorations come down. Until then the API keeps serving the December just gone, with all 31 doors unlocked, so a visitor who missed a night can still catch up and the ribbon tag reads "That was Stathmas 2026". From the 7th of January the site switches to the coming December: every door is locked and the tag counts down to the 1st. `seasonYear` in `server/calendar.js` makes the choice; the date is `SEASON_END` next to it. `?year=` on the API still asks for any year from 2000 to 2100 explicitly.
 
 **Frontend** (`public/`): plain HTML, CSS and JavaScript modules with no build step.
 
 - `js/scene.js` draws the village as SVG in two compositions: a wide card for desktop and a tall one for phones, each with 31 door slots. Door numbers are scattered by composition; the church's big double door is always 24, Christmas Eve.
 - `js/doors.js` prints the front of each paper door (a lit window, a front door, a star, a parcel on the sled), and `js/emblems.js` draws the 31 film pictures behind them.
 - `js/svg.js` is the shared drawing kit. Every shape is printed twice, a flat ink plate slightly off register under a key line plate, which is where the cheap-print look comes from.
-- `js/app.js` lays the doors over the picture as HTML so they can swing open, and runs the film card, the ribbon tag, the picture house bill (the latest film opened, in slot-in letters), the list of doors and the glitter.
+- `js/app.js` lays the doors over the picture as HTML so they can swing open, and runs the film card, the ribbon tag, the picture house bill (the latest film opened, in slot-in letters), the list of doors and the glitter. What those say (the tag's lines, the bill, the door labels) is worked out in `js/words.js`, which has no DOM so it can be unit-tested.
 
 Seven inks only (card, midnight, snow, fir, berry, candlelight, key), with Fraunces for numerals and titles, Libre Caslon Text for words, Berkshire Swash for the wordmark and Reenie Beanie for pencil notes. The fonts are served from `public/fonts/` (Latin subsets, cut by `scripts/subset_fonts.sh`) rather than from Google Fonts, so a visit makes no third-party request.
 
-**Data** lives in `data/stathmas.db`, which is created on first run and ignored by git.
+## Deploying to Vercel
 
-### Redrawing the calendar
+The repository is set up for Vercel as it stands: `public/` is served as the static site, and `api/index.js` is a single function that answers every `/api/*` request (`vercel.json` rewrites them to it). There is no build step and nothing to install.
 
-```bash
-node scripts/reshuffle.js 2026
-```
+1. Import the repository in Vercel (**Add New… → Project**). Leave the framework preset as **Other**; `vercel.json` sets the output directory to `public`.
+2. Under **Settings → Environment Variables**, add `CALENDAR_SECRET` for the **Production** environment. Generate it with `openssl rand -hex 32`, and keep a copy somewhere safe: if it's lost, the next deploy draws a different calendar.
+3. Deploy. Check that `https://<your-domain>/api/health` answers `{"ok":true}` and that `/api/catalog` answers 404, which means preview mode is off.
 
-This draws a new order for that year and prints it. Do it before December: visitors' opened and watched marks are stored by day number, so a mid-month reshuffle would put them on the wrong films.
+A few things worth knowing:
 
-Reshuffling also syncs the catalog with `films.json` before drawing, so this is the way to take a film out of a year that already has a calendar: remove it from the JSON, reshuffle the year, then start the server.
+- **Vercel's "Preview" deployments are not preview mode.** Vercel builds a "Preview" deployment for every branch; those have preview mode off like production unless you add `TIME_TRAVEL=1` to the Preview environment's variables, which is a handy way to test a branch. Without `TIME_TRAVEL=1` they need a `CALENDAR_SECRET` of their own, or they refuse to answer. Never give them production's secret: with preview mode on, anyone with the link could open every door of the real calendar.
+- **If the secret is missing**, every `/api/*` request answers 500 and the function log says why.
+- **Node version:** `package.json` asks for Node 22.13 or newer, below 25, and Vercel picks the newest it has in that range (24 at the time of writing). Node 22 leaves long-term support in April 2027.
+- **Cookies** are marked `Secure` automatically on Vercel, which always serves HTTPS.
+- **Headers:** `vercel.json` adds the same `X-Content-Type-Options` and `Referrer-Policy` headers to the static files that the Node server sends.
 
-## Deploying
+## Deploying with Docker
 
-The site is one Node process with no dependencies and one SQLite file, so a small VPS with Docker and a reverse proxy is enough. Everything below assumes that shape.
+The site is also one Node process with no dependencies and no state, so a small VPS with Docker and a reverse proxy is enough.
 
-### The image
-
-The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/`, `public/` and `scripts/reshuffle.js`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. The image sets `PORT=4747` and `DB_FILE=/data/stathmas.db`, declares `/data` as a volume, and has a `HEALTHCHECK` that asks `/api/health` every 30 seconds.
+The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/` and `public/`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. It has a `HEALTHCHECK` that asks `/api/health` every 30 seconds. There is no volume, because there is nothing to keep.
 
 ```bash
 docker build -t stathmas .
 docker run -d --name stathmas --restart unless-stopped \
-  -p 127.0.0.1:4747:4747 -v stathmas-data:/data -e TIME_TRAVEL=0 stathmas
+  -p 127.0.0.1:4747:4747 -e CALENDAR_SECRET=... stathmas
 ```
 
-`docker-compose.yml` is the same thing written down, with `restart: unless-stopped` and a named volume. Restart matters: an unhandled error can end the Node process, and nothing inside the container will start it again, so Docker has to.
+`docker-compose.yml` is the same thing written down, with `restart: unless-stopped`. It reads `CALENDAR_SECRET` from your shell or from a `.env` file beside it (which `.gitignore` keeps out of git), and refuses to start without one.
 
 ```bash
 docker compose up -d --build
 docker compose logs -f
 ```
 
-### The database is the only state
-
-`DB_FILE` must point at a persistent volume. Everything the site remembers is in that one SQLite file: the year's calendar order, and which doors each visitor has opened and marked watched. The film catalog is not state; it is loaded from `server/data/films.json` at every start. If the file is lost, the next start creates an empty database, draws a new random calendar, and every visitor's doors close. The compose file keeps it in a named volume called `stathmas-data`. If you bind-mount a host directory instead, it must be writable by uid 1000, the `node` user inside the image.
-
-To back it up, don't copy `stathmas.db` on its own: the server keeps the database in WAL mode, so recent writes sit in `stathmas.db-wal` beside it until a checkpoint. Either stop the container and copy all three files, or take a consistent snapshot while it runs:
-
-```bash
-docker compose exec stathmas node -e \
-  'new (require("node:sqlite").DatabaseSync)(process.env.DB_FILE).exec("VACUUM INTO \x27/data/backup.db\x27")'
-docker cp stathmas:/data/backup.db ./stathmas-$(date +%F).db
-```
-
-### HTTPS, compression and the visitor cookie
-
-Put a reverse proxy in front of the container to terminate HTTPS and compress responses. The Node server speaks plain HTTP and does not gzip; the SVG scene and the JavaScript modules compress well, so let the proxy do it. Caddy needs the least configuration, because it fetches and renews the certificate itself. This complete `Caddyfile` does everything the site needs:
+Put a reverse proxy in front of the container to terminate HTTPS and compress responses. Caddy needs the least configuration, because it fetches and renews the certificate itself:
 
 ```
 stathmas.example.com {
@@ -129,18 +139,12 @@ stathmas.example.com {
 }
 ```
 
-(nginx and Traefik work just as well; the only requirement is that the proxy forwards to port 4747.)
+Once HTTPS is in place, set `SECURE_COOKIES=1`, so browsers only send the door cookies over HTTPS. Don't set it without HTTPS: a browser drops a `Secure` cookie that arrives over `http://`, and no door would stay open.
 
-Once HTTPS is in place, start the container with `SECURE_COOKIES=1`. The server then adds the `Secure` attribute to the anonymous visitor cookie, so browsers only send it over HTTPS. The server does not infer this from an `X-Forwarded-Proto` header: it is an explicit setting, so a proxy that forgets to set the header cannot silently downgrade the cookie, and local development over plain `http://` keeps working with the setting left unset. Do not set it without HTTPS, though. A browser drops a `Secure` cookie that arrives over `http://`, so every request would look like a new visitor and no door would stay open.
+## Before December
 
-### Before December
-
-- **Preview mode must be off.** With it on, anyone can open any door by adding `?preview=` to the URL, and `/catalog.html` lists every film. It is on by default for the prototype and is switched off with `TIME_TRAVEL=0`, which the compose file sets. If the server prints "Preview mode is on" at startup, it is on. (Check the top of `server/index.js` for the current name and default of this setting if the README and the code disagree.)
-- **Redraw, if you want to, before December 1, never during it.** The calendar order for a year is drawn once, the first time that year is requested, and stored. `node scripts/reshuffle.js 2026` draws a new one. Visitors' opened and watched marks are keyed by day number, so a reshuffle mid-month would put their marks on the wrong films. Inside the container:
-
-  ```bash
-  docker compose exec stathmas node scripts/reshuffle.js 2026
-  ```
-
-- **Point an uptime check at `GET /api/health`.** It answers `{"ok": true}` with a 200, needs no cookie, and is what the image's own healthcheck uses. `docker ps` shows the container as `healthy` or `unhealthy` from it.
-- **Time zone fallback.** Doors open at midnight in the visitor's own time zone, sent by the browser. `DEFAULT_TZ` (default `America/Los_Angeles`) is only used when a client doesn't send one.
+- **Preview mode must be off.** It is unless `TIME_TRAVEL=1` is set or the server was started with `--preview`. Check that `/api/catalog` answers 404.
+- **The secret must be set, and must not change** until Twelfth Night. Changing it redraws the calendar.
+- **Leave `films.json` alone in December.** Adding or removing a film redraws the calendar; fixing a typo in a logline is fine.
+- **Point an uptime check at `GET /api/health`.** It answers `{"ok": true}` with a 200.
+- **Time zone fallback.** Doors open at midnight in the visitor's own time zone, sent by the browser. `DEFAULT_TZ` is only used when a client doesn't send one.

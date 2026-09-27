@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   unit:
     name: Unit and HTTP tests (Node ${{ matrix.node }})
@@ -11,8 +14,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The floor from "engines" in package.json, and the newest Node 22.
-        node: ['22.13', '22']
+        # The floor from "engines" in package.json, the Docker image's major,
+        # and the major Vercel runs.
+        node: ['22.13', '22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,7 +27,7 @@ jobs:
       - run: npm test
 
   browser:
-    name: Browser smoke test
+    name: Browser tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,3 +38,24 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+
+  vercel:
+    name: Vercel build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # Builds the deployment offline, against a stand-in project, so a
+      # broken vercel.json fails here rather than on deploy. Nothing is
+      # uploaded and no Vercel account is needed.
+      - run: |
+          mkdir -p .vercel
+          echo '{"projectId":"prj_ci","orgId":"team_ci","settings":{"framework":null}}' > .vercel/project.json
+          npx --yes vercel@60 build --yes 2>&1 | tee build.log
+          ! grep -q ERROR build.log
+          test -f .vercel/output/functions/api/index.func/server/data/films.json
+          test ! -e .vercel/output/functions/api/index.func/public
+        env:
+          VERCEL_TELEMETRY_DISABLED: '1'

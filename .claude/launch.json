@@ -4,7 +4,7 @@
     {
       "name": "stathmas",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["--disable-warning=ExperimentalWarning", "--watch", "server/index.js"],
+      "runtimeArgs": ["--watch", "server/index.js", "--preview"],
       "port": 4747
     }
   ]
