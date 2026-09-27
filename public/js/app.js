@@ -168,16 +168,52 @@ function renderTag() {
   $('[data-tag-sub]').textContent = sub;
 }
 
+// The picture house bills the latest film opened, in slot-in letters: a
+// small line above, the title, a small line below.
+const escXml = (s) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+const TILT = [0, -1.6, 0.8, 0, 1.4, -0.6, 0.4, -1.2, 1, 0, -0.8, 1.6];
+
+function billLine(text, x, y, size, cls = '') {
+  const tilt = [...text].map((_, i) => TILT[(i * 7 + text.length) % TILT.length]).join(' ');
+  return `<text class="marquee-letters ${cls}" x="${x}" y="${y.toFixed(1)}" font-size="${size.toFixed(1)}" text-anchor="middle" rotate="${tilt}">${escXml(text)}</text>`;
+}
+
+function splitTitle(title) {
+  if (title.length <= 16 || !title.includes(' ')) return [title];
+  const words = title.split(' ');
+  let best = [title];
+  let bestDiff = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' ');
+    const b = words.slice(i).join(' ');
+    const diff = Math.abs(a.length - b.length);
+    if (diff < bestDiff) { best = [a, b]; bestDiff = diff; }
+  }
+  return best;
+}
+
 function renderMarquee() {
-  const el = $('.marquee');
-  if (!el) return;
-  const { today, year, doors } = state.data;
-  const door = today.year === year && today.month === 12 ? doors[today.day - 1] : null;
-  const text = door?.opened ? door.film.title.split(':')[0].toUpperCase() : '';
-  const width = Number(el.dataset.width);
-  const size = text ? Math.min(24, width / (text.length * 0.66)) : 24;
-  el.setAttribute('font-size', size.toFixed(1));
-  el.textContent = text;
+  const g = $('.marquee');
+  if (!g) return;
+  const [x, y, w, h] = ['x', 'y', 'w', 'h'].map((k) => Number(g.dataset[k]));
+  const cx = x + w / 2;
+  const latest = state.data.doors.filter((d) => d.opened).at(-1);
+  const top = latest ? 'NOW SHOWING' : 'COMING SOON';
+  const foot = latest ? 'JASON STATHAM' : '31 NIGHTS ONLY';
+  const title = latest ? latest.film.title.toUpperCase() : 'JASON STATHAM';
+  // a subtitle goes on its own row, the way a theatre would letter it
+  const lines = title.includes(':') ? title.split(':').map((part) => part.trim()) : splitTitle(title);
+  const longest = Math.max(...lines.map((l) => l.length));
+  const mid = y + 19 + (h - 34) / 2;
+  let body;
+  if (lines.length === 1) {
+    const size = Math.min(23, (w - 18) / (longest * 0.74));
+    body = billLine(lines[0], cx, mid + size * 0.36, size);
+  } else {
+    const size = Math.min(13, (w - 18) / (longest * 0.74));
+    body = billLine(lines[0], cx, mid - 1.5, size) + billLine(lines[1], cx, mid + size + 0.5, size);
+  }
+  g.innerHTML = billLine(top, cx, y + 14.5, 10.5, 'small') + body + billLine(foot, cx, y + h - 4, 10.5, 'small');
 }
 
 function renderPreviewNote() {

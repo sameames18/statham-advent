@@ -75,12 +75,14 @@ function tree(c, cx, base, h, w = h * 0.62) {
     const yb = base - trunk - i * h * 0.26;
     const th = h * 0.42;
     const tw = w * (1 - i * 0.28);
-    c.art.push(poly([[cx - tw / 2, yb], [cx, yb - th], [cx + tw / 2, yb]], INK.fir));
-    // snow resting on the tier's lower edge
-    c.art.push(path(`M${cx - tw / 2 + 2},${yb - 1} Q${cx - tw / 4},${yb - th * 0.22} ${cx},${yb - th * 0.08} Q${cx + tw / 4},${yb - th * 0.24} ${cx + tw / 2 - 2},${yb - 1} Z`, INK.snow, 'nl'));
-    speck(c, cx - tw * 0.2, yb - th * 0.12, 0.7);
+    const ya = yb - th;
+    c.art.push(poly([[cx - tw / 2, yb], [cx, ya], [cx + tw / 2, yb]], INK.fir));
+    // A cap of snow over the top half of each tier, scalloped where it ends.
+    // The tier above hides all of it but a scalloped band.
+    const y1 = ya + th * 0.5, hw = tw / 4, d = th * 0.13;
+    c.art.push(path(`M${cx},${ya} L${cx + hw},${y1} Q${cx + hw * 0.66},${y1 + d} ${cx + hw * 0.33},${y1} Q${cx},${y1 + d} ${cx - hw * 0.33},${y1} Q${cx - hw * 0.66},${y1 + d} ${cx - hw},${y1} Z`, INK.snow));
+    speck(c, cx - hw * 0.5, y1 - 2, 0.7);
   }
-  c.art.push(poly([[cx - w * 0.1, base - trunk - 2 * h * 0.26 - h * 0.3], [cx, base - trunk - 2 * h * 0.26 - h * 0.42], [cx + w * 0.1, base - trunk - 2 * h * 0.26 - h * 0.3]], INK.snow, 'nl'));
 }
 
 function chevron(x0, x1, yEave, yApex, t) {
@@ -150,17 +152,17 @@ function cinema(c, { x, w, top, base }) {
   c.art.push(rect(x, top, w, base - top, INK.card));
   c.art.push(rect(x - 4, top - 4, w + 8, 10, INK.snow));
   c.over.push(`<text class="sign" x="${x + w / 2}" y="${top - 5}" text-anchor="middle" font-size="17" fill="${INK.berry}">PICTURE HOUSE</text>`);
-  // marquee
-  const mx = x + 14, my = top + 26, mw = w - 28, mh = 58;
+  // the bill: a lit letter board, filled in by the page
+  const mx = x + 14, my = top + 20, mw = w - 28, mh = 66;
   c.art.push(rect(mx - 6, my - 6, mw + 12, mh + 12, INK.berry));
   c.art.push(rect(mx, my, mw, mh, INK.card));
   for (let bx = mx + 6; bx <= mx + mw - 4; bx += 16) {
     c.art.push(circ(bx, my - 3, 2.6, INK.candle, 'nl'));
     c.art.push(circ(bx, my + mh + 3, 2.6, INK.candle, 'nl'));
   }
-  c.art.push(line(mx + 10, my + mh / 2 - 12, mx + mw - 10, my + mh / 2 - 12, 'lo', { opacity: 0.25 }));
-  c.art.push(line(mx + 10, my + mh / 2 + 14, mx + mw - 10, my + mh / 2 + 14, 'lo', { opacity: 0.25 }));
-  c.marquee = { x: mx + mw / 2, y: my + mh / 2 + 8, width: mw - 24 };
+  c.art.push(line(mx + 6, my + 19, mx + mw - 6, my + 19, 'lo', { opacity: 0.3 }));
+  c.art.push(line(mx + 6, my + mh - 15, mx + mw - 6, my + mh - 15, 'lo', { opacity: 0.3 }));
+  c.marquee = { x: mx, y: my, w: mw, h: mh };
   c.art.push(rect(x + 6, my + mh + 12, w - 12, 10, INK.berry));
   speck(c, x + w * 0.3, top - 26);
   speck(c, x + w * 0.7, top - 48);
@@ -271,7 +273,7 @@ function wide() {
   const c = context('w', 1500, 1000);
   sky(c, 330, 600);
   stars(c, [[640, 60, 9], [700, 250, 7], [860, 120, 11], [1010, 70, 7], [1180, 210, 9], [1440, 250, 8], [310, 330, 7], [60, 320, 10], [470, 340, 6], [1040, 300, 6], [1290, 360, 7], [1455, 60, 7], [560, 170, 5], [95, 60, 6]]);
-  title(c, 110, 200, 168, 'start', { x0: 170, x1: 600, y: 236, h: 46 });
+  title(c, 118, 198, 146, 'start', { x0: 170, x1: 600, y: 236, h: 46 });
 
   // sky doors: the moon and five stars
   slot(c, 1316, 84, 84, 84, 'moon');
@@ -378,7 +380,7 @@ function tall() {
   // lower lane: the picture house and two houses
   cinema(c, { x: 12, w: 276, top: 972, base: 1172 });
   posterSlot(c, 30, 1082, 62, 80);
-  slot(c, 118, 1068, 64, 104, 'entrance');
+  slot(c, 118, 1082, 64, 90, 'entrance');
   posterSlot(c, 208, 1082, 62, 80);
   house(c, { x: 300, w: 144, top: 1000, apex: 930, base: 1172, wall: INK.shade, roofColor: INK.berry, chimneyAt: 0.3, attic: false });
   windowSlot(c, 306, 1016, 62, 62, INK.card);
@@ -414,9 +416,8 @@ function specksSvg(c) {
 }
 
 function render(c) {
-  const marquee = c.marquee
-    ? `<text class="marquee" x="${c.marquee.x}" y="${c.marquee.y}" text-anchor="middle" font-size="24" fill="${INK.key}" data-width="${c.marquee.width}"></text>`
-    : '';
+  const m = c.marquee;
+  const marquee = m ? `<g class="marquee" data-x="${m.x}" data-y="${m.y}" data-w="${m.w}" data-h="${m.h}"></g>` : '';
   const ribbon = c.ribbon
     ? `<text class="ribbon-text" x="${c.ribbon.x}" y="${c.ribbon.y}" text-anchor="middle" font-size="${c.ribbon.size}" fill="${INK.snow}">A Christmas Calendar</text>`
     : '';

@@ -15,7 +15,7 @@
 
   --display: 'Fraunces', Georgia, serif;
   --text: 'Libre Caslon Text', Georgia, serif;
-  --script: 'Yellowtail', cursive;
+  --script: 'Berkshire Swash', Georgia, serif;
   --hand: 'Reenie Beanie', cursive;
 
   color-scheme: light;
@@ -54,7 +54,10 @@ button { font: inherit; color: inherit; }
 
 .wordmark { font-family: var(--script); }
 .ribbon-text { font-family: var(--text); font-style: italic; }
-.sign, .marquee { font-family: var(--display); font-weight: 800; font-variation-settings: 'SOFT' 100, 'WONK' 0; letter-spacing: .06em; }
+.sign { font-family: var(--display); font-weight: 800; font-variation-settings: 'SOFT' 100, 'WONK' 0; letter-spacing: .06em; }
+/* the cinema bill: slot-in letters on a lit board, a little crooked */
+.marquee-letters { font-family: var(--display); font-weight: 800; font-variation-settings: 'SOFT' 0, 'WONK' 0, 'opsz' 36; letter-spacing: .05em; fill: var(--key); }
+.marquee-letters.small { font-weight: 700; letter-spacing: .14em; fill: var(--berry); }
 .script { font-family: var(--script); }
 .num { font-family: var(--display); font-weight: 800; font-variation-settings: 'SOFT' 100, 'WONK' 1, 'opsz' 72; }
 .lo-text { font-family: var(--display); font-weight: 800; }
