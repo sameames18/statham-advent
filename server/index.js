@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { openDb } from './db.js';
+import { FilmInUseError, openDb } from './db.js';
 import {
   DAYS_IN_DECEMBER, dateIn, isUnlocked, isValidTimeZone, parseDate, seasonYear,
 } from './calendar.js';
@@ -16,7 +16,19 @@ const TIME_TRAVEL = process.env.TIME_TRAVEL !== '0';
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const PUBLIC_ROOT = normalize(PUBLIC_DIR.endsWith(sep) ? PUBLIC_DIR : PUBLIC_DIR + sep);
 
-const store = openDb();
+const store = openCatalog();
+
+// The catalog is synced from films.json on every start. A film can't leave the
+// JSON while a stored calendar still shows it, so stop with the fix spelled out.
+function openCatalog() {
+  try {
+    return openDb();
+  } catch (err) {
+    if (!(err instanceof FilmInUseError)) throw err;
+    console.error(`Stathmas can't start: ${err.message}`);
+    process.exit(1);
+  }
+}
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
