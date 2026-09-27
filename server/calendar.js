@@ -3,6 +3,10 @@
 export const DAYS_IN_DECEMBER = 31;
 
 // Small seeded PRNG (mulberry32). Same seed, same calendar.
+// public/js/svg.js has its own copy for drawing the picture. They are kept
+// separate on purpose: this one turns a year's stored seed into its draw, so
+// any change here changes what a reshuffle produces. The picture's copy is
+// free to change; this one is not.
 export function rng(seed) {
   let a = seed >>> 0;
   return () => {
@@ -43,6 +47,9 @@ export function buildCalendar(filmIds, seed, days = DAYS_IN_DECEMBER) {
       order = shuffle([...filmIds, ...picks], rand);
       if (!hasAdjacentRepeat(order)) break;
     }
+    // With a real catalog this never trips; with very few films it can. Better
+    // to fail loudly than to quietly put one film on two nights running.
+    if (hasAdjacentRepeat(order)) throw new Error('Could not schedule without a repeat');
   }
 
   const seen = new Set();
@@ -87,5 +94,13 @@ export function isUnlocked(year, day, today) {
   return today.month === 12 && today.day >= day;
 }
 
-// Which December the site is currently counting down to.
-export const seasonYear = (today) => today.year;
+// The season runs past New Year to Twelfth Night, 6 January, when the
+// decorations come down. Until then the site keeps showing the December
+// just gone, with every door open; from the 7th it counts down to the next.
+export const SEASON_END = { month: 1, day: 6 };
+
+// Which December's calendar the site is showing today.
+export function seasonYear(today) {
+  const tail = today.month === SEASON_END.month && today.day <= SEASON_END.day;
+  return tail ? today.year - 1 : today.year;
+}

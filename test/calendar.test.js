@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCalendar, isUnlocked, parseDate, dateIn, isValidTimeZone } from '../server/calendar.js';
+import {
+  buildCalendar, isUnlocked, parseDate, dateIn, isValidTimeZone, seasonYear, SEASON_END,
+} from '../server/calendar.js';
 
 const films = Array.from({ length: 28 }, (_, i) => i + 1);
 
@@ -36,6 +38,10 @@ test('no film plays two nights running', () => {
   }
 });
 
+test('it throws rather than schedule a repeat when the films cannot be spread out', () => {
+  assert.throws(() => buildCalendar([1, 2], 5, 31), { message: 'Could not schedule without a repeat' });
+});
+
 test('same seed, same calendar; different seed, different calendar', () => {
   assert.deepEqual(buildCalendar(films, 7), buildCalendar(films, 7));
   assert.notDeepEqual(buildCalendar(films, 7), buildCalendar(films, 8));
@@ -55,6 +61,22 @@ test('doors unlock on their day in December and stay unlocked', () => {
   assert.equal(isUnlocked(2026, 14, { year: 2026, month: 12, day: 14 }), true);
   assert.equal(isUnlocked(2026, 31, { year: 2027, month: 1, day: 2 }), true);
   assert.equal(isUnlocked(2026, 1, { year: 2025, month: 12, day: 31 }), false);
+});
+
+test('the season runs to Twelfth Night, then the site counts down to the next December', () => {
+  assert.deepEqual(SEASON_END, { month: 1, day: 6 });
+  assert.equal(seasonYear({ year: 2026, month: 12, day: 31 }), 2026);
+  assert.equal(seasonYear({ year: 2027, month: 1, day: 1 }), 2026);
+  assert.equal(seasonYear({ year: 2027, month: 1, day: 6 }), 2026);
+  assert.equal(seasonYear({ year: 2027, month: 1, day: 7 }), 2027);
+  assert.equal(seasonYear({ year: 2027, month: 6, day: 15 }), 2027);
+  assert.equal(seasonYear({ year: 2027, month: 11, day: 30 }), 2027);
+});
+
+test('during the tail of the season, last December\'s doors are all unlocked', () => {
+  const day = { year: 2027, month: 1, day: 6 };
+  const year = seasonYear(day);
+  for (let d = 1; d <= 31; d++) assert.equal(isUnlocked(year, d, day), true, `door ${d}`);
 });
 
 test('preview dates parse strictly', () => {

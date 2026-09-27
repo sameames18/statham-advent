@@ -1,0 +1,28 @@
+# Example deployment. Put a reverse proxy that terminates HTTPS in front
+# (see "Deploying" in README.md), then:
+#   docker compose up -d --build
+services:
+  stathmas:
+    build: .
+    container_name: stathmas
+    # An unhandled error can end the Node process; Docker brings it straight back.
+    restart: unless-stopped
+    ports:
+      # Bound to localhost only: the reverse proxy on this host forwards to it.
+      # Use "4747:4747" if the proxy runs elsewhere (e.g. another container).
+      - "127.0.0.1:4747:4747"
+    environment:
+      # A real December: preview mode must be off, or anyone can open any door.
+      TIME_TRAVEL: "0"
+      # Once HTTPS is terminated in front of this container, mark the visitor
+      # cookie Secure. Leave it unset while testing over plain http://, or the
+      # browser will discard the cookie and every request looks like a new visitor.
+      # SECURE_COOKIES: "1"
+      # Fallback time zone when the browser doesn't send one.
+      # DEFAULT_TZ: America/Los_Angeles
+    volumes:
+      # The database is the only state worth backing up. See README.md.
+      - stathmas-data:/data
+
+volumes:
+  stathmas-data:
