@@ -29,10 +29,11 @@ function visitorId(req, res) {
 
 // ---------- views ----------
 
-const filmSummary = ({ slug, title, year, hue, character }) => ({ slug, title, year, hue, character });
+const filmSummary = ({ slug, title, year, character }) => ({ slug, title, year, character });
 
 function filmDetail(film) {
-  const { id, wiki, ...rest } = film;
+  // The box office figure and the v1 poster colour stay in the catalog but are not part of the site.
+  const { id, wiki, gross, hue, ...rest } = film;
   return { ...rest, wikipedia: wiki ? `https://en.wikipedia.org/wiki/${encodeURIComponent(wiki)}` : null };
 }
 
@@ -96,18 +97,9 @@ export function createHandler(store, {
   function calendar(req, res, ctx) {
     const states = store.doorStates(ctx.visitor, ctx.year);
     const doors = store.days(ctx.year).map((e) => doorView(e, ctx.now, ctx.year, states.get(e.day)));
-    const firstOfDecember = new Date(Date.UTC(ctx.year, 11, 1)).getUTCDay(); // 0 = Sunday
     return send(res, 200, {
       year: ctx.year,
       today: ctx.now,
-      firstWeekday: firstOfDecember,
-      filmCount: store.filmCount(),
-      timeTravel,
-      stats: {
-        unlocked: doors.filter((d) => d.unlocked).length,
-        opened: doors.filter((d) => d.opened).length,
-        watched: doors.filter((d) => d.watched).length,
-      },
       doors,
     });
   }
