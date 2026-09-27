@@ -43,6 +43,9 @@ export function buildCalendar(filmIds, seed, days = DAYS_IN_DECEMBER) {
       order = shuffle([...filmIds, ...picks], rand);
       if (!hasAdjacentRepeat(order)) break;
     }
+    // With a real catalog this never trips; with very few films it can. Better
+    // to fail loudly than to quietly put one film on two nights running.
+    if (hasAdjacentRepeat(order)) throw new Error('Could not schedule without a repeat');
   }
 
   const seen = new Set();
