@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { once } from 'node:events';
+import { Worker } from 'node:worker_threads';
 import { FilmInUseError, openDb } from '../server/db.js';
 
 const catalog = JSON.parse(readFileSync(new URL('../server/data/films.json', import.meta.url), 'utf8'));
@@ -199,6 +201,71 @@ test('re-seeding with a changed title updates the row in place, and a stored cal
     assert.equal(second.day(YEAR, dayOfMeg).film.title, 'The Meg (Director’s Cut)', 'the calendar sees the new title');
     second.close();
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A second process on the same file, like `reshuffle.js` beside a running server,
+// holds the write lock for 200 ms, running `sql` inside its transaction. node:sqlite
+// is synchronous, so a write waiting here blocks this thread: the lock is held from
+// a worker thread, whose timer still runs meanwhile. Resolves once the lock is held.
+async function holdWriteLock(file, sql = '') {
+  const worker = new Worker(`
+    const { parentPort, workerData } = require('node:worker_threads');
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(workerData.file);
+    db.exec('BEGIN IMMEDIATE');
+    db.exec(workerData.sql);
+    parentPort.postMessage('locked');
+    setTimeout(() => { db.exec('COMMIT'); db.close(); }, 200);
+  `, { eval: true, workerData: { file, sql } });
+  const [msg] = await once(worker, 'message');
+  assert.equal(msg, 'locked');
+  return worker;
+}
+
+test('writes wait for another connection’s transaction instead of failing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'stathmas-'));
+  const file = join(dir, 'test.db');
+  const first = openDb(file);
+  first.ensureCalendar(YEAR);
+  let second, holder;
+  try {
+    holder = await holdWriteLock(file);
+    const started = performance.now();
+    // Opening a second handle mid-lock, as an overlapping restart would, syncs
+    // the catalog, which is a write; then a door is opened through each handle.
+    second = openDb(file);
+    second.open('visitor-a', YEAR, 3);
+    first.open('visitor-b', YEAR, 4);
+    const waited = performance.now() - started;
+
+    assert.ok(waited >= 100, `the writes should have waited for the lock (waited ${Math.round(waited)} ms)`);
+    assert.ok(second.doorState('visitor-a', YEAR, 3));
+    assert.ok(first.doorState('visitor-a', YEAR, 3), 'the other handle sees the write');
+    assert.ok(second.doorState('visitor-b', YEAR, 4));
+  } finally {
+    await holder?.terminate();
+    second?.close();
+    first.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ensureCalendar keeps a draw another process made while it waited for the lock', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'stathmas-'));
+  const file = join(dir, 'test.db');
+  const store = openDb(file);
+  let holder;
+  try {
+    // The other process draws 2031 but has not committed, so the store's first
+    // look finds no calendar and it goes on to wait for the lock.
+    holder = await holdWriteLock(file, 'INSERT INTO calendars (year, seed) VALUES (2031, 42)');
+    assert.doesNotThrow(() => store.ensureCalendar(2031));
+    assert.deepEqual(store.days(2031), [], 'the other draw was kept, not added to');
+  } finally {
+    await holder?.terminate();
+    store.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

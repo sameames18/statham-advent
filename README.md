@@ -20,7 +20,7 @@ Needs Node 22.13 or newer. There are no dependencies to install.
 node server/index.js
 ```
 
-Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file changes) and `npm test` work too if npm is installed.
+Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file changes, with preview mode on) and `npm test` work too if npm is installed.
 
 The server sends its files with `ETag` and `Last-Modified` validators and `Cache-Control: no-cache`, so a returning browser asks whether each file has changed and gets a bodiless 304 when it hasn't, while an edit is picked up on the very next load after a deploy. It does not compress anything: if you put it on the internet, run it behind a reverse proxy (Caddy, nginx) and let the proxy do gzip or brotli.
 
@@ -44,7 +44,9 @@ Playwright is pinned to the version whose Chromium build the review environment 
 
 ### Preview mode
 
-Before December every door is locked. To pretend it's another date, add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. While preview mode is on, http://localhost:4747/catalog.html shows every film at once, with its picture, logline and note, in release order. It gives the whole calendar away, so it's switched off along with preview mode. Preview mode is on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
+Before December every door is locked. To pretend it's another date, start the server with preview mode on and add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. While preview mode is on, http://localhost:4747/catalog.html shows every film at once, with its picture, logline and note, in release order. It gives the whole calendar away, so it's switched off along with preview mode.
+
+Preview mode is off by default. `npm run dev` turns it on (it passes `--preview`); otherwise start the server with `TIME_TRAVEL=1 node server/index.js` or `node server/index.js --preview`. When it is on, the server prints "Preview mode is on" at startup.
 
 ## How it works
 
@@ -91,7 +93,7 @@ The site is one Node process with no dependencies and one SQLite file, so a smal
 
 ### The image
 
-The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/`, `public/` and `scripts/reshuffle.js`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. The image sets `PORT=4747` and `DB_FILE=/data/stathmas.db`, declares `/data` as a volume, and has a `HEALTHCHECK` that asks `/api/health` every 30 seconds.
+The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/`, `public/` and `scripts/reshuffle.js`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. The image sets `PORT=4747`, `DB_FILE=/data/stathmas.db` and `TIME_TRAVEL=0`, declares `/data` as a volume, and has a `HEALTHCHECK` that asks `/api/health` every 30 seconds.
 
 ```bash
 docker build -t stathmas .
@@ -135,7 +137,7 @@ Once HTTPS is in place, start the container with `SECURE_COOKIES=1`. The server 
 
 ### Before December
 
-- **Preview mode must be off.** With it on, anyone can open any door by adding `?preview=` to the URL, and `/catalog.html` lists every film. It is on by default for the prototype and is switched off with `TIME_TRAVEL=0`, which the compose file sets. If the server prints "Preview mode is on" at startup, it is on. (Check the top of `server/index.js` for the current name and default of this setting if the README and the code disagree.)
+- **Preview mode must be off.** With it on, anyone can open any door by adding `?preview=` to the URL, and `/catalog.html` lists every film. It is off unless the server is started with `TIME_TRAVEL=1` or `--preview`, and the image and the compose file both set `TIME_TRAVEL=0` as well. If the server prints "Preview mode is on" at startup, it is on.
 - **Redraw, if you want to, before December 1, never during it.** The calendar order for a year is drawn once, the first time that year is requested, and stored. `node scripts/reshuffle.js 2026` draws a new one. Visitors' opened and watched marks are keyed by day number, so a reshuffle mid-month would put their marks on the wrong films. Inside the container:
 
   ```bash

@@ -112,8 +112,8 @@ async function readJson(req, res) {
 export function createHandler(store, {
   defaultTz = 'America/Los_Angeles',
   // Preview mode lets the client pretend it's a different date (?preview= in the
-  // page URL). Handy outside December; switch it off (TIME_TRAVEL=0) for a real one.
-  timeTravel = true,
+  // page URL). Off unless asked for, since it gives every door away.
+  timeTravel = false,
   // Mark the visitor cookie Secure (HTTPS only). Set when a reverse proxy
   // terminates HTTPS in front of the server; off for plain-HTTP development.
   secureCookies = false,

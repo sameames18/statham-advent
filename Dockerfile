@@ -2,9 +2,12 @@
 # Pinned to a Node 22 minor that satisfies "engines" in package.json (>=22.13).
 FROM node:22.22-slim
 
+# TIME_TRAVEL=0 keeps preview mode off. That is already the default; it is set
+# here too so the image stays safe whatever the code's default becomes.
 ENV NODE_ENV=production \
     PORT=4747 \
-    DB_FILE=/data/stathmas.db
+    DB_FILE=/data/stathmas.db \
+    TIME_TRAVEL=0
 
 WORKDIR /app
 COPY package.json ./

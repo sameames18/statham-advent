@@ -5,8 +5,9 @@ import { createHandler } from './app.js';
 const PORT = Number(process.env.PORT ?? 4747);
 const DEFAULT_TZ = process.env.DEFAULT_TZ ?? 'America/Los_Angeles';
 // Preview mode lets the client pretend it's a different date (?preview= in the
-// page URL). Handy outside December; switch it off (TIME_TRAVEL=0) for a real one.
-const TIME_TRAVEL = process.env.TIME_TRAVEL !== '0';
+// page URL) and serves the whole catalog, so anyone could open every door. It is
+// off unless asked for with TIME_TRAVEL=1 or --preview (which `npm run dev` passes).
+const TIME_TRAVEL = process.env.TIME_TRAVEL === '1' || process.argv.includes('--preview');
 // Behind a reverse proxy that terminates HTTPS, set SECURE_COOKIES=1 so the
 // visitor cookie is only ever sent over HTTPS. Off by default so plain-HTTP
 // local development keeps working (a Secure cookie is dropped over http://).

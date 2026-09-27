@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS door_states (
 export function openDb(file = process.env.DB_FILE ?? join(here, '..', 'data', 'stathmas.db'), { seed = true } = {}) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
-  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+  // Another process on the same file (reshuffle.js beside the server, or an old
+  // container still running during a restart) can hold the write lock. Wait up
+  // to 5 s for it instead of failing at once with "database is locked".
+  db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
   // Pass { seed: false } to look at the database without touching the catalog
   // (reshuffle does, so it can drop a year's calendar before the sync runs).
@@ -92,7 +95,9 @@ function seedFilms(db, films = loadFilms()) {
   const yearsUsing = db.prepare('SELECT DISTINCT year FROM calendar_days WHERE film_id = ? ORDER BY year');
   const remove = db.prepare('DELETE FROM films WHERE id = ?');
 
-  db.exec('BEGIN');
+  // IMMEDIATE takes the write lock up front, so a busy database is waited out here
+  // rather than failing midway when a read would have to become a write.
+  db.exec('BEGIN IMMEDIATE');
   try {
     for (const f of films) upsert.run(f);
     const keep = new Set(films.map((f) => f.slug));
@@ -147,12 +152,16 @@ function makeStore(db) {
     // The calendar for a year is drawn once, with a random seed, then kept.
     ensureCalendar(year) {
       if (q.calendar.get(year)) return;
-      const seed = randomInt(2 ** 31);
-      const ids = q.filmIds.all().map((r) => r.id);
-      db.exec('BEGIN');
+      db.exec('BEGIN IMMEDIATE');
       try {
-        q.insertCalendar.run(year, seed);
-        for (const d of buildCalendar(ids, seed)) q.insertDay.run(year, d.day, d.filmId, d.encore ? 1 : 0);
+        // Check again under the write lock: another process may have drawn this
+        // year while we waited for it.
+        if (!q.calendar.get(year)) {
+          const seed = randomInt(2 ** 31);
+          const ids = q.filmIds.all().map((r) => r.id);
+          q.insertCalendar.run(year, seed);
+          for (const d of buildCalendar(ids, seed)) q.insertDay.run(year, d.day, d.filmId, d.encore ? 1 : 0);
+        }
         db.exec('COMMIT');
       } catch (err) {
         db.exec('ROLLBACK');

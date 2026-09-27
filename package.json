@@ -7,7 +7,7 @@
   "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js --preview",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
     "test:browser": "node --disable-warning=ExperimentalWarning --test \"test/browser/*.test.js\"",
     "reshuffle": "node --disable-warning=ExperimentalWarning scripts/reshuffle.js"
