@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { openDb } from './db.js';
+import { FilmInUseError, openDb } from './db.js';
 import { createHandler } from './app.js';
 
 const PORT = Number(process.env.PORT ?? 4747);
@@ -12,7 +12,19 @@ const TIME_TRAVEL = process.env.TIME_TRAVEL !== '0';
 // local development keeps working (a Secure cookie is dropped over http://).
 const SECURE_COOKIES = !!process.env.SECURE_COOKIES && process.env.SECURE_COOKIES !== '0';
 
-const store = openDb();
+// The catalog is synced from films.json on every start. A film can't leave the
+// JSON while a stored calendar still shows it, so stop with the fix spelled out.
+function openCatalog() {
+  try {
+    return openDb();
+  } catch (err) {
+    if (!(err instanceof FilmInUseError)) throw err;
+    console.error(`Stathmas can't start: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+const store = openCatalog();
 const server = createServer(createHandler(store, {
   defaultTz: DEFAULT_TZ, timeTravel: TIME_TRAVEL, secureCookies: SECURE_COOKIES,
 }));

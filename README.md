@@ -10,7 +10,7 @@ Thirty-one films, one per door. Twenty-eight are every film where Statham is the
 
 The order is random and drawn once per year, the first time that year's calendar is requested. After that it's stored, so every visitor gets the same calendar. (If the catalog ever has fewer films than days, the spare days become encores of films already shown.)
 
-Facts (director, runtime, release year, character) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json` and is loaded into the database each time the server starts.
+Facts (director, runtime, release year, character) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json`, and the database is synced to it each time the server starts: edited entries are updated, new ones added, and any film no longer in the JSON is deleted. A film can't be deleted while a stored calendar still has it behind a door; the server refuses to start and names the film and the year, and you reshuffle that year first (see [Redrawing the calendar](#redrawing-the-calendar)) or put the film back.
 
 ## Running it
 
@@ -21,6 +21,8 @@ node server/index.js
 ```
 
 Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file changes) and `npm test` work too if npm is installed.
+
+The server sends its files with `ETag` and `Last-Modified` validators and `Cache-Control: no-cache`, so a returning browser asks whether each file has changed and gets a bodiless 304 when it hasn't, while an edit is picked up on the very next load after a deploy. It does not compress anything: if you put it on the internet, run it behind a reverse proxy (Caddy, nginx) and let the proxy do gzip or brotli.
 
 ### Preview mode
 
@@ -62,6 +64,8 @@ node scripts/reshuffle.js 2026
 ```
 
 This draws a new order for that year and prints it. Do it before December: visitors' opened and watched marks are stored by day number, so a mid-month reshuffle would put them on the wrong films.
+
+Reshuffling also syncs the catalog with `films.json` before drawing, so this is the way to take a film out of a year that already has a calendar: remove it from the JSON, reshuffle the year, then start the server.
 
 ## Deploying
 

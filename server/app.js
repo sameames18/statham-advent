@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -59,6 +59,20 @@ function doorView(entry, now, year, state) {
 }
 
 // ---------- plumbing ----------
+
+// Does the copy the browser holds still match? If-None-Match wins when both
+// are sent (RFC 9110 §13.1.3); tags compare weakly, so W/ prefixes are ignored.
+function isFresh(req, etag, mtimeMs) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const noneMatch = req.headers['if-none-match'];
+  if (noneMatch !== undefined) {
+    const bare = (tag) => tag.trim().replace(/^W\//, '');
+    return noneMatch.trim() === '*' || noneMatch.split(',').some((tag) => bare(tag) === bare(etag));
+  }
+  const since = Date.parse(req.headers['if-modified-since'] ?? '');
+  // Last-Modified is sent to the second, so compare at that precision.
+  return !Number.isNaN(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
+}
 
 function send(res, status, body, done) {
   res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -171,6 +185,10 @@ export function createHandler(store, {
     return send(res, 404, { error: 'Not found' });
   }
 
+  // Static files are served with validators (ETag, Last-Modified) and
+  // Cache-Control: no-cache, so browsers keep a copy but check it on every
+  // load. An unchanged file costs a 304 with no body instead of the whole
+  // file, while an edit is picked up on the very next load after a deploy.
   async function staticFile(req, res, url) {
     let rel;
     try {
@@ -181,13 +199,40 @@ export function createHandler(store, {
     }
     const file = normalize(join(publicDir, rel));
     if (!file.startsWith(publicRoot)) return send(res, 403, { error: 'Forbidden' });
+
+    let info;
     try {
-      const body = await readFile(file);
-      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
-      res.end(body);
+      info = await stat(file);
     } catch {
-      send(res, 404, { error: 'Not found' });
+      return send(res, 404, { error: 'Not found' });
     }
+    if (!info.isFile()) return send(res, 404, { error: 'Not found' });
+
+    const etag = `W/"${info.size}-${Math.floor(info.mtimeMs).toString(16)}"`;
+    const headers = {
+      ...SECURITY_HEADERS,
+      'Cache-Control': 'no-cache',
+      ETag: etag,
+      'Last-Modified': new Date(info.mtimeMs).toUTCString(),
+    };
+    if (isFresh(req, etag, info.mtimeMs)) {
+      res.writeHead(304, headers);
+      return res.end();
+    }
+
+    headers['Content-Type'] = TYPES[extname(file)] ?? 'application/octet-stream';
+    if (req.method === 'HEAD') {
+      res.writeHead(200, { ...headers, 'Content-Length': info.size });
+      return res.end();
+    }
+    let body;
+    try {
+      body = await readFile(file);
+    } catch {
+      return send(res, 404, { error: 'Not found' });
+    }
+    res.writeHead(200, { ...headers, 'Content-Length': body.length });
+    res.end(body);
   }
 
   return async function handler(req, res) {
