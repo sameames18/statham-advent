@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stathmas: the programme</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..900,0..100,0..1&family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Yellowtail&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .programme { width: min(1180px, calc(100vw - 32px)); margin: 40px auto; padding: 44px clamp(20px, 4vw, 56px) 48px; position: relative; background: var(--card); }
+    .programme::before { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(42, 33, 28, .55); outline: 1px solid rgba(42, 33, 28, .25); outline-offset: -4px; pointer-events: none; }
+    .programme h1 { margin: 0; font-family: var(--script); font-weight: 400; font-size: clamp(56px, 8vw, 88px); color: var(--berry); line-height: 1; }
+    .programme .intro { margin: 8px 0 32px; font-style: italic; font-size: 16px; }
+    .films { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0 40px; margin: 0; padding: 0; list-style: none; }
+    .film-entry { display: grid; grid-template-columns: 104px 1fr; gap: 16px; padding: 20px 0; border-top: 1px dotted rgba(42, 33, 28, .45); }
+    .film-entry .pic { width: 104px; height: 104px; background: radial-gradient(closest-side, rgba(232, 176, 74, .75), rgba(232, 176, 74, .12) 75%, transparent); }
+    .film-entry .emblem-svg { width: 100%; height: 100%; --lw: 1.3px; }
+    .film-entry h2 { margin: 0; font-family: var(--display); font-weight: 750; font-variation-settings: 'SOFT' 100, 'WONK' 1, 'opsz' 48; font-size: 21px; line-height: 1.1; }
+    .film-entry .meta { margin: 4px 0 0; font-size: 13px; }
+    .film-entry .as { margin: 1px 0 0; font-size: 13px; font-style: italic; }
+    .film-entry .logline { margin: 10px 0 0; font-size: 15px; line-height: 1.45; }
+    .film-entry .note { margin: 8px 0 0; padding-left: 10px; border-left: 2px solid var(--berry); font-size: 14px; line-height: 1.45; font-style: italic; color: #4a3f37; }
+    .programme .gone { font-style: italic; }
+  </style>
+</head>
+<body>
+  <main class="programme">
+    <h1>The programme</h1>
+    <p class="intro" data-intro>Every film on the calendar, in release order. This page only exists in preview mode, because it gives the whole game away.</p>
+    <ol class="films" data-films></ol>
+  </main>
+  <script type="module">
+    import { emblemSvg } from './js/emblems.js';
+    const list = document.querySelector('[data-films]');
+    const res = await fetch('/api/catalog');
+    if (!res.ok) {
+      document.querySelector('[data-intro]').textContent = 'The programme is only available while preview mode is on.';
+    } else {
+      const { films } = await res.json();
+      for (const f of films) {
+        const li = document.createElement('li');
+        li.className = 'film-entry';
+        li.innerHTML = `<div class="pic">${emblemSvg(f.slug)}</div><div><h2></h2><p class="meta"></p><p class="as"></p><p class="logline"></p><p class="note"></p></div>`;
+        li.querySelector('h2').textContent = f.title;
+        li.querySelector('.meta').textContent = `${f.year} · Directed by ${f.director} · ${f.runtime} minutes`;
+        li.querySelector('.as').textContent = `Jason Statham as ${f.character}`;
+        li.querySelector('.logline').textContent = f.logline;
+        li.querySelector('.note').textContent = f.note;
+        list.append(li);
+      }
+    }
+  </script>
+</body>
+</html>

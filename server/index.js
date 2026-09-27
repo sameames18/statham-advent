@@ -119,6 +119,9 @@ async function api(req, res, url) {
 
   const path = url.pathname;
   if (req.method === 'GET' && path === '/api/health') return send(res, 200, { ok: true });
+  // Every film at once, for reviewing the catalog. It spoils the whole
+  // calendar, so it only exists while preview mode is on.
+  if (req.method === 'GET' && path === '/api/catalog' && TIME_TRAVEL) return send(res, 200, { films: store.films().map(filmDetail) });
   if (req.method === 'GET' && path === '/api/calendar') return calendar(req, res, ctx);
   if (req.method === 'POST' && path === '/api/reset') return reset(req, res, ctx);
 

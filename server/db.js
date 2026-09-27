@@ -72,6 +72,7 @@ function makeStore(db) {
   const q = {
     filmIds: db.prepare('SELECT id FROM films ORDER BY id'),
     filmCount: db.prepare('SELECT count(*) AS n FROM films'),
+    films: db.prepare('SELECT * FROM films ORDER BY year, id'),
     calendar: db.prepare('SELECT seed FROM calendars WHERE year = ?'),
     insertCalendar: db.prepare('INSERT INTO calendars (year, seed) VALUES (?, ?)'),
     deleteCalendar: db.prepare('DELETE FROM calendars WHERE year = ?'),
@@ -90,6 +91,7 @@ function makeStore(db) {
 
   const store = {
     filmCount: () => q.filmCount.get().n,
+    films: () => q.films.all(),
 
     // The calendar for a year is drawn once, with a random seed, then kept.
     ensureCalendar(year) {

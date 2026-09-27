@@ -22,7 +22,7 @@ Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file ch
 
 ### Preview mode
 
-Before December every door is locked. To pretend it's another date, add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. Preview mode is on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
+Before December every door is locked. To pretend it's another date, add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. While preview mode is on, http://localhost:4747/catalog.html shows every film at once, with its picture, logline and note, in release order. It gives the whole calendar away, so it's switched off along with preview mode. Preview mode is on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
 
 ## How it works
 
@@ -35,6 +35,7 @@ Before December every door is locked. To pretend it's another date, add `?previe
 | `POST /api/doors/:day/open` | Opens a door. Refused with 403 before its date. |
 | `POST /api/doors/:day/watched` | Marks a film watched (`{"watched": false}` to undo). |
 | `POST /api/reset` | Closes all of this visitor's doors. |
+| `GET /api/catalog` | Every film in release order. Preview mode only. |
 
 The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. Visitors are identified by an anonymous cookie; there are no accounts. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
 
