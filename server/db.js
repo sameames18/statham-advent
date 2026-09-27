@@ -45,12 +45,14 @@ CREATE TABLE IF NOT EXISTS door_states (
 );
 `;
 
-export function openDb(file = process.env.DB_FILE ?? join(here, '..', 'data', 'stathmas.db')) {
+// `films` overrides the catalog read from films.json; tests use it to seed a
+// small or altered catalog.
+export function openDb(file = process.env.DB_FILE ?? join(here, '..', 'data', 'stathmas.db'), { films } = {}) {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
-  seedFilms(db);
+  seedFilms(db, films);
   return makeStore(db);
 }
 

@@ -22,6 +22,24 @@ node server/index.js
 
 Then open http://localhost:4747. `npm start`, `npm run dev` (restarts on file changes) and `npm test` work too if npm is installed.
 
+### Tests
+
+```bash
+npm test
+```
+
+Unit tests for the calendar logic, the drawing modules, the database layer and the HTTP API, all on Node's built-in test runner with nothing to install. They run on every push and pull request (`.github/workflows/test.yml`).
+
+There is also a browser smoke test that drives the real page in headless Chromium. It needs the one development dependency, Playwright, and a browser, so it is a separate script:
+
+```bash
+npm install
+npx playwright install chromium
+npm run test:browser
+```
+
+Playwright is pinned to the version whose Chromium build the review environment already has, so bump it deliberately.
+
 ### Preview mode
 
 Before December every door is locked. To pretend it's another date, add `?preview=2026-12-14` to the URL. A pencilled note under the card shows the preview date; click it to rub it out, or use `?preview=off`. While previewing, the list of doors has a "close all my doors again" link. While preview mode is on, http://localhost:4747/catalog.html shows every film at once, with its picture, logline and note, in release order. It gives the whole calendar away, so it's switched off along with preview mode. Preview mode is on by default for the prototype. Turn it off for a real December with `TIME_TRAVEL=0`.
