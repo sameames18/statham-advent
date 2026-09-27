@@ -1,10 +1,14 @@
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   DAYS_IN_DECEMBER, dateIn, isUnlocked, isValidTimeZone, parseDate, seasonYear,
 } from './calendar.js';
+import { fillSiteUrl } from './site.js';
+import {
+  NONE, isOpened, isWatched, marksCookie, readMarks, withOpened, withWatched,
+} from './marks.js';
 
 const DEFAULT_PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -26,15 +30,11 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
 };
 
-// ---------- request context ----------
-
-function visitorId(req, res, secure) {
-  const match = /(?:^|;\s*)visitor=([0-9a-f-]{36})/.exec(req.headers.cookie ?? '');
-  if (match) return match[1];
-  const id = randomUUID();
-  res.setHeader('Set-Cookie', `visitor=${id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
-  return id;
-}
+// The years the API will answer for, whether asked with ?year= or implied
+// by a preview date.
+const MIN_YEAR = 2000;
+const MAX_YEAR = 2100;
+const inRange = (year) => Number.isInteger(year) && year >= MIN_YEAR && year <= MAX_YEAR;
 
 // ---------- views ----------
 
@@ -42,19 +42,19 @@ const filmSummary = ({ slug, title, year, character }) => ({ slug, title, year, 
 
 function filmDetail(film) {
   // The box office figure and the v1 poster colour stay in the catalog but are not part of the site.
-  const { id, wiki, gross, hue, ...rest } = film;
+  const { wiki, gross, hue, ...rest } = film;
   return { ...rest, wikipedia: wiki ? `https://en.wikipedia.org/wiki/${encodeURIComponent(wiki)}` : null };
 }
 
-function doorView(entry, now, year, state) {
+function doorView(entry, now, year, marks) {
   const unlocked = isUnlocked(year, entry.day, now);
-  const opened = unlocked && !!state;
+  const opened = unlocked && isOpened(marks, entry.day);
   return {
     day: entry.day,
     unlocked,
     isToday: now.year === year && now.month === 12 && now.day === entry.day,
     opened,
-    watched: opened && !!state.watchedAt,
+    watched: opened && isWatched(marks, entry.day),
     encore: opened ? entry.encore : undefined,
     // Nothing about a film leaves the server until its door is opened.
     film: opened ? filmSummary(entry.film) : null,
@@ -107,22 +107,24 @@ async function readJson(req, res) {
   }
 }
 
-// Build the request handler for `http.createServer`. `store` comes from
-// `openDb()`; the options default to what the real server uses, and tests
-// pass their own.
-export function createHandler(store, {
+// Build the request handler for `http.createServer`. `catalog` comes from
+// `loadCatalog()`; the options are what server/config.js reads from the
+// environment, and tests pass their own.
+export function createHandler(catalog, {
   defaultTz = 'America/Los_Angeles',
-  // Preview mode lets the client pretend it's a different date (?preview= in the
-  // page URL). Off unless asked for, since it gives every door away.
+  // Preview mode: the client may pretend it's another date (X-Preview-Date).
   timeTravel = false,
-  // Mark the visitor cookie Secure (HTTPS only). Set when a reverse proxy
-  // terminates HTTPS in front of the server; off for plain-HTTP development.
+  // Mark the door cookies Secure (HTTPS only).
   secureCookies = false,
   // The site's public origin, e.g. https://stathmas.example.com, with no
-  // trailing slash. Link-preview crawlers want the thumbnail's absolute URL
-  // and only the deployment knows it; empty leaves the URL root-relative.
+  // trailing slash, for the thumbnail's absolute URL (see site.js). Empty
+  // leaves it root-relative.
   siteUrl = '',
+  // Serve public/ as well as the API. Vercel serves the files itself.
+  serveStatic = true,
   publicDir = DEFAULT_PUBLIC_DIR,
+  // The real time; tests pass a fixed one.
+  clock = () => new Date(),
 } = {}) {
   const publicRoot = normalize(publicDir.endsWith(sep) ? publicDir : publicDir + sep);
   // index.html is the one templated file: %SITE_URL% is filled in on the way
@@ -133,16 +135,15 @@ export function createHandler(store, {
   // "Today", in the visitor's own time zone so doors open at their midnight.
   function today(req) {
     const preview = timeTravel ? parseDate(req.headers['x-preview-date']) : null;
-    if (preview) return { ...preview, preview: true };
+    if (preview && inRange(preview.year)) return { ...preview, preview: true };
     const tz = req.headers['x-timezone'];
-    return { ...dateIn(isValidTimeZone(tz) ? tz : defaultTz), preview: false };
+    return { ...dateIn(isValidTimeZone(tz) ? tz : defaultTz, clock()), preview: false };
   }
 
   // ---------- routes ----------
 
   function calendar(req, res, ctx) {
-    const states = store.doorStates(ctx.visitor, ctx.year);
-    const doors = store.days(ctx.year).map((e) => doorView(e, ctx.now, ctx.year, states.get(e.day)));
+    const doors = catalog.days(ctx.year).map((e) => doorView(e, ctx.now, ctx.year, ctx.marks));
     return send(res, 200, {
       year: ctx.year,
       today: ctx.now,
@@ -155,26 +156,25 @@ export function createHandler(store, {
     if (!isUnlocked(ctx.year, day, ctx.now)) {
       return send(res, 403, { error: 'Too early', message: `Door ${day} opens on December ${day}.` });
     }
-    if (action === 'open') store.open(ctx.visitor, ctx.year, day);
-    if (action === 'watched') {
-      store.open(ctx.visitor, ctx.year, day);
-      store.setWatched(ctx.visitor, ctx.year, day, ctx.body?.watched !== false);
-    }
-    const entry = store.day(ctx.year, day);
-    const state = store.doorState(ctx.visitor, ctx.year, day);
-    if (!state) return send(res, 403, { error: 'Not opened', message: 'Open the door first.' });
-    return send(res, 200, { ...doorView(entry, ctx.now, ctx.year, state), film: filmDetail(entry.film) });
+    let { marks } = ctx;
+    if (action === 'open') marks = withOpened(marks, day);
+    if (action === 'watched') marks = withWatched(marks, day, ctx.body?.watched !== false);
+    if (action) res.setHeader('Set-Cookie', marksCookie(ctx.year, marks, secureCookies));
+    if (!isOpened(marks, day)) return send(res, 403, { error: 'Not opened', message: 'Open the door first.' });
+    const entry = catalog.day(ctx.year, day);
+    return send(res, 200, { ...doorView(entry, ctx.now, ctx.year, marks), film: filmDetail(entry.film) });
   }
 
   function reset(req, res, ctx) {
-    store.resetVisitor(ctx.visitor, ctx.year);
+    res.setHeader('Set-Cookie', marksCookie(ctx.year, NONE, secureCookies));
     return send(res, 200, { ok: true });
   }
 
   async function api(req, res, url) {
-    const ctx = { visitor: visitorId(req, res, secureCookies), now: today(req) };
+    const ctx = { now: today(req) };
     const yearParam = Number(url.searchParams.get('year'));
-    ctx.year = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= 2100 ? yearParam : seasonYear(ctx.now);
+    ctx.year = url.searchParams.has('year') && inRange(yearParam) ? yearParam : seasonYear(ctx.now);
+    ctx.marks = readMarks(req.headers.cookie, ctx.year);
     if (req.method === 'POST') {
       ctx.body = await readJson(req, res);
       if (ctx.body === undefined) return; // 413 already sent
@@ -184,7 +184,7 @@ export function createHandler(store, {
     if (req.method === 'GET' && path === '/api/health') return send(res, 200, { ok: true });
     // Every film at once, for reviewing the catalog. It spoils the whole
     // calendar, so it only exists while preview mode is on.
-    if (req.method === 'GET' && path === '/api/catalog' && timeTravel) return send(res, 200, { films: store.films().map(filmDetail) });
+    if (req.method === 'GET' && path === '/api/catalog' && timeTravel) return send(res, 200, { films: catalog.films().map(filmDetail) });
     if (req.method === 'GET' && path === '/api/calendar') return calendar(req, res, ctx);
     if (req.method === 'POST' && path === '/api/reset') return reset(req, res, ctx);
 
@@ -243,7 +243,7 @@ export function createHandler(store, {
     } catch {
       return send(res, 404, { error: 'Not found' });
     }
-    if (templated) body = Buffer.from(body.toString('utf8').replaceAll('%SITE_URL%', siteUrl));
+    if (templated) body = Buffer.from(fillSiteUrl(body.toString('utf8'), siteUrl));
     if (req.method === 'HEAD') {
       res.writeHead(200, { ...headers, 'Content-Length': body.length });
       return res.end();
@@ -264,7 +264,8 @@ export function createHandler(store, {
         return send(res, 400, { error: 'Bad request' });
       }
       if (url.pathname.startsWith('/api/')) await api(req, res, url);
-      else await staticFile(req, res, url);
+      else if (serveStatic) await staticFile(req, res, url);
+      else send(res, 404, { error: 'Not found' });
     } catch (err) {
       console.error(err);
       if (!res.headersSent) send(res, 500, { error: 'Server error' });

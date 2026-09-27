@@ -1,6 +1,7 @@
 # Example deployment. Put a reverse proxy that terminates HTTPS in front
-# (see "Deploying" in README.md), then:
-#   docker compose up -d --build
+# (see "Deploying with Docker" in README.md), then:
+#   CALENDAR_SECRET=... docker compose up -d --build
+# or put CALENDAR_SECRET=... in a .env file next to this one.
 services:
   stathmas:
     build: .
@@ -12,20 +13,15 @@ services:
       # Use "4747:4747" if the proxy runs elsewhere (e.g. another container).
       - "127.0.0.1:4747:4747"
     environment:
-      # A real December: preview mode must be off, or anyone can open any door.
-      TIME_TRAVEL: "0"
-      # Once HTTPS is terminated in front of this container, mark the visitor
-      # cookie Secure. Leave it unset while testing over plain http://, or the
-      # browser will discard the cookie and every request looks like a new visitor.
+      # Decides the calendar. Keep it secret, and keep it the same all season:
+      # changing it redraws every door.
+      CALENDAR_SECRET: ${CALENDAR_SECRET:?Set CALENDAR_SECRET, e.g. the output of openssl rand -hex 32}
+      # Once HTTPS is terminated in front of this container, mark the door
+      # cookies Secure. Leave it unset while testing over plain http://, or the
+      # browser will discard them and no door will stay open.
       # SECURE_COOKIES: "1"
       # The public address, so link previews (Slack, iMessage, X) can find the
       # thumbnail. See "Link previews" in README.md.
       # SITE_URL: https://stathmas.example.com
       # Fallback time zone when the browser doesn't send one.
       # DEFAULT_TZ: America/Los_Angeles
-    volumes:
-      # The database is the only state worth backing up. See README.md.
-      - stathmas-data:/data
-
-volumes:
-  stathmas-data:

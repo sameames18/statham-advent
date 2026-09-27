@@ -2,6 +2,7 @@ import { composition } from './scene.js';
 import { faceSvg } from './doors.js';
 import { emblemSvg } from './emblems.js';
 import { esc } from './svg.js';
+import { billText, doorLabel, ordinal, previewNote, tagText } from './words.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -49,19 +50,6 @@ async function api(path, { method = 'GET', body } = {}) {
   return json;
 }
 
-// ---------- words ----------
-
-function ordinal(n) {
-  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] ?? 'th';
-  return `${n}${s}`;
-}
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-function daysUntilDecember(today, year) {
-  return Math.round((Date.UTC(year, 11, 1) - Date.UTC(today.year, today.month - 1, today.day)) / 86_400_000);
-}
-
 // ---------- the scene and its doors ----------
 
 const pct = (v) => `${(v * 100).toFixed(3)}%`;
@@ -97,13 +85,6 @@ function buildScene() {
 }
 
 const doorEl = (day) => $(`.door[data-day="${day}"]`);
-
-function doorLabel(d) {
-  const date = `December ${d.day}`;
-  if (d.opened) return `${date}: ${d.film.title}${d.watched ? ', seen' : ''}`;
-  if (d.unlocked) return `${date}: ready to open`;
-  return `${date}: not yet`;
-}
 
 function fillRecess(el, d) {
   const recess = $('.recess', el);
@@ -147,24 +128,7 @@ function applyState() {
 // ---------- the ribbon tag, the marquee, the preview note ----------
 
 function renderTag() {
-  const { today, year, doors } = state.data;
-  const seen = doors.filter((d) => d.watched).length;
-  let line;
-  let sub;
-  if (today.year > year) {
-    line = `That was Stathmas ${year}.`;
-    sub = `${seen} of 31 seen.`;
-  } else if (today.month !== 12) {
-    const n = daysUntilDecember(today, year);
-    line = 'The first door opens on the 1st of December.';
-    sub = n === 1 ? 'One more sleep.' : `${n} days to go.`;
-  } else {
-    const d = today.day;
-    const door = doors[d - 1];
-    line = `The ${ordinal(d)} of December.`;
-    if (door.opened) sub = d === 31 ? 'Happy New Year.' : d === 24 ? 'Merry Christmas.' : 'See you tomorrow.';
-    else sub = d === 24 ? 'The big door is lit.' : `Door ${d} is lit.`;
-  }
+  const { line, sub } = tagText(state.data);
   $('[data-tag-line]').textContent = line;
   $('[data-tag-sub]').textContent = sub;
 }
@@ -178,31 +142,12 @@ function billLine(text, x, y, size, cls = '') {
   return `<text class="marquee-letters ${cls}" x="${x}" y="${y.toFixed(1)}" font-size="${size.toFixed(1)}" text-anchor="middle" rotate="${tilt}">${esc(text)}</text>`;
 }
 
-function splitTitle(title) {
-  if (title.length <= 16 || !title.includes(' ')) return [title];
-  const words = title.split(' ');
-  let best = [title];
-  let bestDiff = Infinity;
-  for (let i = 1; i < words.length; i++) {
-    const a = words.slice(0, i).join(' ');
-    const b = words.slice(i).join(' ');
-    const diff = Math.abs(a.length - b.length);
-    if (diff < bestDiff) { best = [a, b]; bestDiff = diff; }
-  }
-  return best;
-}
-
 function renderMarquee() {
   const g = $('.marquee');
   if (!g) return;
   const [x, y, w, h] = ['x', 'y', 'w', 'h'].map((k) => Number(g.dataset[k]));
   const cx = x + w / 2;
-  const latest = state.data.doors.filter((d) => d.opened).at(-1);
-  const top = latest ? 'NOW SHOWING' : 'COMING SOON';
-  const foot = latest ? 'JASON STATHAM' : '31 NIGHTS ONLY';
-  const title = latest ? latest.film.title.toUpperCase() : 'JASON STATHAM';
-  // a subtitle goes on its own row, the way a theatre would letter it
-  const lines = title.includes(':') ? title.split(':').map((part) => part.trim()) : splitTitle(title);
+  const { top, lines, foot } = billText(state.data.doors);
   const longest = Math.max(...lines.map((l) => l.length));
   const mid = y + 19 + (h - 34) / 2;
   let body;
@@ -220,7 +165,7 @@ function renderPreviewNote() {
   const note = $('[data-preview-note]');
   const { today } = state.data;
   note.hidden = !today.preview;
-  if (today.preview) note.textContent = `preview: ${today.day} ${MONTHS[today.month - 1].slice(0, 3)} (rub out)`;
+  if (today.preview) note.textContent = previewNote(today);
   $('[data-reset]').hidden = !today.preview;
 }
 
@@ -259,7 +204,7 @@ async function openDoor(el, day) {
     Object.assign(door, { opened: true, watched: detail.watched, film: { slug, title, year, character } });
     fillRecess(el, door);
     requestAnimationFrame(() => applyState());
-    setTimeout(() => showFilm(day), calm.matches ? 0 : 950);
+    setTimeout(() => showFilm(day).catch(() => {}), calm.matches ? 0 : 950);
   } catch (err) {
     if (err.status === 403) notYet(el, day);
   } finally {
@@ -299,21 +244,28 @@ async function showFilm(day) {
   if (!dlg.open) dlg.showModal();
 }
 
-async function toggleSeen() {
+// Taps are remembered at once, so a quick second tap undoes the first, and
+// sent one at a time, so the server ends up where the last tap left it.
+let seenQueue = Promise.resolve();
+function toggleSeen() {
   const day = state.filmDay;
   const detail = state.details.get(day);
   const watched = !detail.watched;
+  detail.watched = watched;
   const btn = $('[data-seen]');
   btn.classList.add('is-drawing');
   btn.setAttribute('aria-checked', String(watched));
-  try {
-    const next = await api(`/api/doors/${day}/watched`, { method: 'POST', body: { watched } });
-    state.details.set(day, next);
-    state.data.doors[day - 1].watched = next.watched;
-    applyState();
-  } catch {
-    btn.setAttribute('aria-checked', String(!watched));
-  }
+  seenQueue = seenQueue.then(async () => {
+    try {
+      await api(`/api/doors/${day}/watched`, { method: 'POST', body: { watched } });
+      state.data.doors[day - 1].watched = watched;
+      applyState();
+    } catch {
+      detail.watched = !watched;
+      if (state.filmDay === day) btn.setAttribute('aria-checked', String(!watched));
+    }
+  });
+  return seenQueue;
 }
 
 // ---------- the list of doors ----------
@@ -408,7 +360,11 @@ $('[data-list-items]').addEventListener('click', (e) => {
 $('[data-preview-note]').addEventListener('click', () => { storage.set(PREVIEW_KEY, null); load(); });
 
 $('[data-reset]').addEventListener('click', async () => {
-  await api('/api/reset', { method: 'POST' });
+  try {
+    await api('/api/reset', { method: 'POST' });
+  } catch {
+    return; // the doors stay as they were, and so does the list
+  }
   $('[data-list]').close();
   load();
 });

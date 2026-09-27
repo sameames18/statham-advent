@@ -1,28 +1,20 @@
-# Stathmas: one Node process, no npm dependencies, SQLite database on /data.
-# Pinned to a Node 22 minor that satisfies "engines" in package.json (>=22.13).
+# Stathmas: one Node process, no npm dependencies, nothing stored on disk.
+# The calendar is worked out from CALENDAR_SECRET and each visitor's doors
+# live in their own cookies, so the container has no state to keep.
+# Pinned to a Node 22 minor that satisfies "engines" in package.json.
 FROM node:22.22-slim
 
 # TIME_TRAVEL=0 keeps preview mode off. That is already the default; it is set
 # here too so the image stays safe whatever the code's default becomes.
+# SITE_URL (the public address, for link previews) is set at run time.
 ENV NODE_ENV=production \
     PORT=4747 \
-    DB_FILE=/data/stathmas.db \
     TIME_TRAVEL=0
 
 WORKDIR /app
 COPY package.json ./
 COPY server/ ./server/
 COPY public/ ./public/
-# So a deployed calendar can be redrawn before December from inside the container:
-#   docker compose exec stathmas node scripts/reshuffle.js 2026
-COPY scripts/reshuffle.js ./scripts/
-
-# The database is the only state. It lives on a volume so it outlives the
-# container. /data is handed to the unprivileged `node` user (uid 1000) that
-# the official image ships, and a named volume copies that ownership on first
-# use; a bind mount must be made writable by uid 1000 yourself.
-RUN mkdir -p /data && chown node:node /data
-VOLUME /data
 
 USER node
 EXPOSE 4747
@@ -31,4 +23,6 @@ EXPOSE 4747
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + process.env.PORT + '/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["node", "--disable-warning=ExperimentalWarning", "server/index.js"]
+# Needs CALENDAR_SECRET at run time (see README.md); without it the server
+# refuses to start. Preview mode stays off unless TIME_TRAVEL=1.
+CMD ["node", "server/index.js"]

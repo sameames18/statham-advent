@@ -1,56 +1,22 @@
 import { createServer } from 'node:http';
-import { FilmInUseError, openDb } from './db.js';
 import { createHandler } from './app.js';
+import { loadCatalog } from './catalog.js';
+import { ConfigError, readConfig } from './config.js';
 
-const PORT = Number(process.env.PORT ?? 4747);
-const DEFAULT_TZ = process.env.DEFAULT_TZ ?? 'America/Los_Angeles';
-// Preview mode lets the client pretend it's a different date (?preview= in the
-// page URL) and serves the whole catalog, so anyone could open every door. It is
-// off unless asked for with TIME_TRAVEL=1 or --preview (which `npm run dev` passes).
-const TIME_TRAVEL = process.env.TIME_TRAVEL === '1' || process.argv.includes('--preview');
-// Behind a reverse proxy that terminates HTTPS, set SECURE_COOKIES=1 so the
-// visitor cookie is only ever sent over HTTPS. Off by default so plain-HTTP
-// local development keeps working (a Secure cookie is dropped over http://).
-const SECURE_COOKIES = !!process.env.SECURE_COOKIES && process.env.SECURE_COOKIES !== '0';
-// The public address, e.g. SITE_URL=https://stathmas.example.com. Link previews
-// in Slack, iMessage, X and the rest fetch the thumbnail from an absolute URL,
-// which only the deployment knows. Unset, the page gives a root-relative one.
-const SITE_URL = siteOrigin(process.env.SITE_URL);
-
-function siteOrigin(value) {
-  if (!value) return '';
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    url = null;
-  }
-  if (url?.protocol !== 'https:' && url?.protocol !== 'http:') {
-    console.error(`Stathmas can't start: SITE_URL must be an http(s) address like https://stathmas.example.com, not "${value}".`);
-    process.exit(1);
-  }
-  return url.origin;
+let config;
+try {
+  config = readConfig();
+} catch (err) {
+  if (!(err instanceof ConfigError)) throw err;
+  console.error(`Stathmas can't start: ${err.message}`);
+  process.exit(1);
 }
 
-// The catalog is synced from films.json on every start. A film can't leave the
-// JSON while a stored calendar still shows it, so stop with the fix spelled out.
-function openCatalog() {
-  try {
-    return openDb();
-  } catch (err) {
-    if (!(err instanceof FilmInUseError)) throw err;
-    console.error(`Stathmas can't start: ${err.message}`);
-    process.exit(1);
-  }
-}
+const catalog = loadCatalog({ secret: config.secret });
+const server = createServer(createHandler(catalog, config));
 
-const store = openCatalog();
-const server = createServer(createHandler(store, {
-  defaultTz: DEFAULT_TZ, timeTravel: TIME_TRAVEL, secureCookies: SECURE_COOKIES, siteUrl: SITE_URL,
-}));
-
-server.listen(PORT, () => {
-  console.log(`Stathmas is running at http://localhost:${PORT}`);
-  if (!SITE_URL) console.log('SITE_URL is not set: link previews may not show the thumbnail.');
-  if (TIME_TRAVEL) console.log(`Preview mode is on: add ?preview=2026-12-14 to the URL to pretend it's another day.`);
+server.listen(config.port, () => {
+  console.log(`Stathmas is running at http://localhost:${config.port}`);
+  if (!config.siteUrl) console.log('SITE_URL is not set: link previews may not show the thumbnail.');
+  if (config.timeTravel) console.log('Preview mode is on: add ?preview=2026-12-14 to the URL to pretend it\'s another day. Never run a real December like this.');
 });

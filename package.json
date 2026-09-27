@@ -4,13 +4,12 @@
   "description": "An advent calendar of Jason Statham action vehicles.",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13" },
+  "engines": { "node": ">=22.13 <25" },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js --preview",
-    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
-    "test:browser": "node --disable-warning=ExperimentalWarning --test \"test/browser/*.test.js\"",
-    "reshuffle": "node --disable-warning=ExperimentalWarning scripts/reshuffle.js"
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js --preview",
+    "test": "node --test \"test/*.test.js\"",
+    "test:browser": "node --test --test-concurrency=1 \"test/browser/*.test.js\""
   },
   "devDependencies": {
     "playwright": "1.56.1"
