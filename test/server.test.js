@@ -1,40 +1,90 @@
-import test, { before, after } from 'node:test';
+import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { statSync } from 'node:fs';
-import { createHandler } from '../server/index.js';
+import { createServer, request } from 'node:http';
+import { connect } from 'node:net';
+import { once } from 'node:events';
 import { openDb } from '../server/db.js';
+import { statSync } from 'node:fs';
+import { createHandler } from '../server/app.js';
 
-// The handler runs on a port of its own with an in-memory database, so the
-// tests never touch data/stathmas.db or the real 4747.
-let server;
 let store;
+let server;
+let port;
 let base;
 
 before(async () => {
   store = openDb(':memory:');
-  server = createServer(createHandler(store));
-  await new Promise((done) => server.listen(0, '127.0.0.1', done));
-  base = `http://127.0.0.1:${server.address().port}`;
+  server = createServer(createHandler(store, { timeTravel: true }));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  port = server.address().port;
+  base = `http://127.0.0.1:${port}`;
 });
 
 after(async () => {
   server.closeAllConnections();
-  await new Promise((done) => server.close(done));
+  server.close();
   store.close();
+  await once(server, 'close');
 });
 
-const get = (path, headers = {}) => fetch(base + path, { headers });
+// Send whatever bytes we like, bypassing http.request's own URL validation.
+function rawRequest(requestLine) {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, '127.0.0.1');
+    let data = '';
+    socket.setEncoding('utf8');
+    socket.on('connect', () => socket.end(`${requestLine} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`));
+    socket.on('data', (chunk) => { data += chunk; });
+    socket.on('end', () => resolve(data));
+    socket.on('error', reject);
+  });
+}
 
-test('the API answers through the exported handler', async () => {
-  const res = await get('/api/health');
-  assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ok: true });
-  assert.equal(res.headers.get('cache-control'), 'no-store');
+function get(path) {
+  return new Promise((resolve, reject) => {
+    const req = request({ host: '127.0.0.1', port, path, method: 'GET' }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('a request target the URL parser rejects gets a 400, and the server survives', async () => {
+  const raw = await rawRequest('GET //[');
+  const [head, body] = raw.split('\r\n\r\n');
+  assert.equal(head.split('\r\n')[0], 'HTTP/1.1 400 Bad Request');
+  // The body arrives chunked; the JSON is the one line that starts with a brace.
+  assert.deepEqual(JSON.parse(body.split('\r\n').find((line) => line.startsWith('{'))), { error: 'Bad request' });
+
+  const health = await get('/api/health');
+  assert.equal(health.status, 200);
+  assert.deepEqual(JSON.parse(health.body), { ok: true });
 });
+
+test('a malformed percent-escape in a static path gets a 400', async () => {
+  const res = await get('/%ZZ');
+  assert.equal(res.status, 400);
+  assert.deepEqual(JSON.parse(res.body), { error: 'Bad request' });
+});
+
+test('a door that has not unlocked yet returns 403', async () => {
+  // Door 25 of the 2100 calendar stays locked for the rest of our lifetimes.
+  const res = await get('/api/doors/25?year=2100');
+  assert.equal(res.status, 403);
+  assert.equal(JSON.parse(res.body).error, 'Too early');
+});
+
+// ---------- static files and caching ----------
+
+const fetchGet = (path, headers = {}) => fetch(base + path, { headers });
 
 test('a first GET of a static file sends the file with validators and no-cache', async () => {
-  const res = await get('/js/app.js');
+  const res = await fetchGet('/js/app.js');
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'text/javascript; charset=utf-8');
   assert.equal(res.headers.get('cache-control'), 'no-cache');
@@ -46,11 +96,11 @@ test('a first GET of a static file sends the file with validators and no-cache',
 });
 
 test('a second GET with If-None-Match set to that ETag gets a 304 with no body', async () => {
-  const first = await get('/styles.css');
+  const first = await fetchGet('/styles.css');
   const etag = first.headers.get('etag');
   await first.arrayBuffer();
 
-  const again = await get('/styles.css', { 'If-None-Match': etag });
+  const again = await fetchGet('/styles.css', { 'If-None-Match': etag });
   assert.equal(again.status, 304);
   assert.equal(again.headers.get('etag'), etag);
   assert.equal(again.headers.get('cache-control'), 'no-cache');
@@ -58,34 +108,34 @@ test('a second GET with If-None-Match set to that ETag gets a 304 with no body',
 });
 
 test('a stale ETag gets the whole file again', async () => {
-  const res = await get('/styles.css', { 'If-None-Match': 'W/"1-abc"' });
+  const res = await fetchGet('/styles.css', { 'If-None-Match': 'W/"1-abc"' });
   assert.equal(res.status, 200);
   assert.ok((await res.arrayBuffer()).byteLength > 0);
 });
 
 test('a strong tag with the same value still matches, and a list of tags is searched', async () => {
-  const first = await get('/');
+  const first = await fetchGet('/');
   const etag = first.headers.get('etag');
   await first.arrayBuffer();
   const strong = etag.replace(/^W\//, '');
-  const res = await get('/', { 'If-None-Match': `"nope", ${strong}` });
+  const res = await fetchGet('/', { 'If-None-Match': `"nope", ${strong}` });
   assert.equal(res.status, 304);
 });
 
 test('If-Modified-Since is honoured when there is no If-None-Match', async () => {
-  const first = await get('/js/scene.js');
+  const first = await fetchGet('/js/scene.js');
   const lastModified = first.headers.get('last-modified');
   await first.arrayBuffer();
 
-  const fresh = await get('/js/scene.js', { 'If-Modified-Since': lastModified });
+  const fresh = await fetchGet('/js/scene.js', { 'If-Modified-Since': lastModified });
   assert.equal(fresh.status, 304);
   assert.equal((await fresh.arrayBuffer()).byteLength, 0);
 
-  const stale = await get('/js/scene.js', { 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT' });
+  const stale = await fetchGet('/js/scene.js', { 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT' });
   assert.equal(stale.status, 200);
   await stale.arrayBuffer();
 
-  const junk = await get('/js/scene.js', { 'If-Modified-Since': 'not a date' });
+  const junk = await fetchGet('/js/scene.js', { 'If-Modified-Since': 'not a date' });
   assert.equal(junk.status, 200);
   await junk.arrayBuffer();
 });
@@ -103,8 +153,8 @@ test('HEAD sends the same headers and no body', async () => {
 });
 
 test('missing files, directories and paths outside public/ are still refused', async () => {
-  assert.equal((await get('/nope.js')).status, 404);
-  assert.equal((await get('/js')).status, 404);
-  assert.equal((await get('/js/')).status, 404);
-  assert.equal((await get('/..%2f..%2fpackage.json')).status, 403);
+  assert.equal((await fetchGet('/nope.js')).status, 404);
+  assert.equal((await fetchGet('/js')).status, 404);
+  assert.equal((await fetchGet('/js/')).status, 404);
+  assert.equal((await fetchGet('/..%2f..%2fpackage.json')).status, 403);
 });

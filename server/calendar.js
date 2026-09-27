@@ -87,5 +87,13 @@ export function isUnlocked(year, day, today) {
   return today.month === 12 && today.day >= day;
 }
 
-// Which December the site is currently counting down to.
-export const seasonYear = (today) => today.year;
+// The season runs past New Year to Twelfth Night, 6 January, when the
+// decorations come down. Until then the site keeps showing the December
+// just gone, with every door open; from the 7th it counts down to the next.
+export const SEASON_END = { month: 1, day: 6 };
+
+// Which December's calendar the site is showing today.
+export function seasonYear(today) {
+  const tail = today.month === SEASON_END.month && today.day <= SEASON_END.day;
+  return tail ? today.year - 1 : today.year;
+}

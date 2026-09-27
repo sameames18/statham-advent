@@ -43,6 +43,8 @@ Before December every door is locked. To pretend it's another date, add `?previe
 
 The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. Visitors are identified by an anonymous cookie; there are no accounts. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
 
+**The season** runs from the 1st of December to Twelfth Night, the 6th of January, when the decorations come down. Until then the API keeps serving the December just gone, with all 31 doors unlocked, so a visitor who missed a night can still catch up and the ribbon tag reads "That was Stathmas 2026". From the 7th of January the site switches to the coming December: every door is locked, the tag counts down to the 1st, and that year's calendar is drawn the first time it's requested. `seasonYear` in `server/calendar.js` makes the choice; the date is `SEASON_END` next to it. `?year=` on the API still asks for any year explicitly.
+
 **Frontend** (`public/`): plain HTML, CSS and JavaScript modules with no build step.
 
 - `js/scene.js` draws the village as SVG in two compositions: a wide card for desktop and a tall one for phones, each with 31 door slots. Door numbers are scattered by composition; the church's big double door is always 24, Christmas Eve.
