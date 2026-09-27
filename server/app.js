@@ -29,10 +29,11 @@ function visitorId(req, res) {
 
 // ---------- views ----------
 
-const filmSummary = ({ slug, title, year, hue, character }) => ({ slug, title, year, hue, character });
+const filmSummary = ({ slug, title, year, character }) => ({ slug, title, year, character });
 
 function filmDetail(film) {
-  const { id, wiki, ...rest } = film;
+  // The box office figure and the v1 poster colour stay in the catalog but are not part of the site.
+  const { id, wiki, gross, hue, ...rest } = film;
   return { ...rest, wikipedia: wiki ? `https://en.wikipedia.org/wiki/${encodeURIComponent(wiki)}` : null };
 }
 
@@ -67,19 +68,31 @@ function isFresh(req, etag, mtimeMs) {
   return !Number.isNaN(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
 }
 
-function send(res, status, body) {
+function send(res, status, body, done) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(body), done);
 }
 
-async function readJson(req) {
-  let raw = '';
+const MAX_BODY_BYTES = 10_000;
+
+// Collect the body as bytes and decode it once at the end: appending chunks to
+// a string would mangle a multi-byte character split across two chunks. An
+// empty or malformed body is tolerated as {}. A body over the limit is answered
+// with 413 here and the stream destroyed; the caller gets undefined and stops.
+async function readJson(req, res) {
+  const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
-    raw += chunk;
-    if (raw.length > 10_000) break;
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      await new Promise((resolve) => send(res, 413, { error: 'Body too large' }, resolve));
+      req.destroy();
+      return undefined;
+    }
+    chunks.push(chunk);
   }
   try {
-    return raw ? JSON.parse(raw) : {};
+    return size ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
   } catch {
     return {};
   }
@@ -110,18 +123,9 @@ export function createHandler(store, {
   function calendar(req, res, ctx) {
     const states = store.doorStates(ctx.visitor, ctx.year);
     const doors = store.days(ctx.year).map((e) => doorView(e, ctx.now, ctx.year, states.get(e.day)));
-    const firstOfDecember = new Date(Date.UTC(ctx.year, 11, 1)).getUTCDay(); // 0 = Sunday
     return send(res, 200, {
       year: ctx.year,
       today: ctx.now,
-      firstWeekday: firstOfDecember,
-      filmCount: store.filmCount(),
-      timeTravel,
-      stats: {
-        unlocked: doors.filter((d) => d.unlocked).length,
-        opened: doors.filter((d) => d.opened).length,
-        watched: doors.filter((d) => d.watched).length,
-      },
       doors,
     });
   }
@@ -136,8 +140,8 @@ export function createHandler(store, {
       store.open(ctx.visitor, ctx.year, day);
       store.setWatched(ctx.visitor, ctx.year, day, ctx.body?.watched !== false);
     }
-    const entry = store.days(ctx.year).find((e) => e.day === day);
-    const state = store.doorStates(ctx.visitor, ctx.year).get(day);
+    const entry = store.day(ctx.year, day);
+    const state = store.doorState(ctx.visitor, ctx.year, day);
     if (!state) return send(res, 403, { error: 'Not opened', message: 'Open the door first.' });
     return send(res, 200, { ...doorView(entry, ctx.now, ctx.year, state), film: filmDetail(entry.film) });
   }
@@ -151,7 +155,10 @@ export function createHandler(store, {
     const ctx = { visitor: visitorId(req, res), now: today(req) };
     const yearParam = Number(url.searchParams.get('year'));
     ctx.year = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= 2100 ? yearParam : seasonYear(ctx.now);
-    if (req.method === 'POST') ctx.body = await readJson(req);
+    if (req.method === 'POST') {
+      ctx.body = await readJson(req, res);
+      if (ctx.body === undefined) return; // 413 already sent
+    }
 
     const path = url.pathname;
     if (req.method === 'GET' && path === '/api/health') return send(res, 200, { ok: true });

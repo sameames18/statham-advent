@@ -10,7 +10,7 @@ Thirty-one films, one per door. Twenty-eight are every film where Statham is the
 
 The order is random and drawn once per year, the first time that year's calendar is requested. After that it's stored, so every visitor gets the same calendar. (If the catalog ever has fewer films than days, the spare days become encores of films already shown.)
 
-Facts (director, runtime, release year, character, box office) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json` and is loaded into the database each time the server starts.
+Facts (director, runtime, release year, character) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json` and is loaded into the database each time the server starts.
 
 ## Running it
 

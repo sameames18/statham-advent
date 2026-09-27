@@ -38,6 +38,10 @@ test('no film plays two nights running', () => {
   }
 });
 
+test('it throws rather than schedule a repeat when the films cannot be spread out', () => {
+  assert.throws(() => buildCalendar([1, 2], 5, 31), { message: 'Could not schedule without a repeat' });
+});
+
 test('same seed, same calendar; different seed, different calendar', () => {
   assert.deepEqual(buildCalendar(films, 7), buildCalendar(films, 7));
   assert.notDeepEqual(buildCalendar(films, 7), buildCalendar(films, 8));
