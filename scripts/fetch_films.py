@@ -1,6 +1,6 @@
 """Pull infobox facts for each Statham vehicle from Wikipedia wikitext.
 Output is a raw research dump; the curated catalog lives in server/data/films.json."""
-import json, re, sys, urllib.parse, urllib.request
+import json, os, re, sys, urllib.parse, urllib.request
 
 PAGES = [
  "The_Transporter","Transporter_2","Chaos_(2005_action_film)","Revolver_(2005_film)","Crank_(film)",
@@ -38,4 +38,8 @@ for p in PAGES:
         "plot": re.sub(r"<ref.*?</ref>|\[\[(?:[^\]|]*\|)?([^\]]*)\]\]", lambda m: m.group(1) or "", plot.group(1))[:900] if plot else None,
     })
     print(p, "ok", file=sys.stderr)
-json.dump(out, open("films_raw.json", "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+# Written next to this script (scripts/films_raw.json, which .gitignore lists),
+# wherever it is run from.
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "films_raw.json")
+with open(OUT, "w", encoding="utf-8") as f:
+    json.dump(out, f, indent=1, ensure_ascii=False)

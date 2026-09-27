@@ -8,6 +8,12 @@ import {
 
 const DEFAULT_PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 
+// Sent with every response, static or API.
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -19,11 +25,11 @@ const TYPES = {
 
 // ---------- request context ----------
 
-function visitorId(req, res) {
+function visitorId(req, res, secure) {
   const match = /(?:^|;\s*)visitor=([0-9a-f-]{36})/.exec(req.headers.cookie ?? '');
   if (match) return match[1];
   const id = randomUUID();
-  res.setHeader('Set-Cookie', `visitor=${id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `visitor=${id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
   return id;
 }
 
@@ -69,7 +75,7 @@ function isFresh(req, etag, mtimeMs) {
 }
 
 function send(res, status, body, done) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body), done);
 }
 
@@ -106,6 +112,9 @@ export function createHandler(store, {
   // Preview mode lets the client pretend it's a different date (?preview= in the
   // page URL). Handy outside December; switch it off (TIME_TRAVEL=0) for a real one.
   timeTravel = true,
+  // Mark the visitor cookie Secure (HTTPS only). Set when a reverse proxy
+  // terminates HTTPS in front of the server; off for plain-HTTP development.
+  secureCookies = false,
   publicDir = DEFAULT_PUBLIC_DIR,
 } = {}) {
   const publicRoot = normalize(publicDir.endsWith(sep) ? publicDir : publicDir + sep);
@@ -152,7 +161,7 @@ export function createHandler(store, {
   }
 
   async function api(req, res, url) {
-    const ctx = { visitor: visitorId(req, res), now: today(req) };
+    const ctx = { visitor: visitorId(req, res, secureCookies), now: today(req) };
     const yearParam = Number(url.searchParams.get('year'));
     ctx.year = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= 2100 ? yearParam : seasonYear(ctx.now);
     if (req.method === 'POST') {
@@ -201,6 +210,7 @@ export function createHandler(store, {
 
     const etag = `W/"${info.size}-${Math.floor(info.mtimeMs).toString(16)}"`;
     const headers = {
+      ...SECURITY_HEADERS,
       'Cache-Control': 'no-cache',
       ETag: etag,
       'Last-Modified': new Date(info.mtimeMs).toUTCString(),

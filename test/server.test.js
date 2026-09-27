@@ -47,7 +47,7 @@ function get(path) {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, body }));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
     });
     req.on('error', reject);
     req.end();
@@ -77,6 +77,35 @@ test('a door that has not unlocked yet returns 403', async () => {
   const res = await get('/api/doors/25?year=2100');
   assert.equal(res.status, 403);
   assert.equal(JSON.parse(res.body).error, 'Too early');
+});
+
+test('every response carries the security headers', async () => {
+  for (const path of ['/api/health', '/', '/styles.css', '/no-such-file', '/api/no-such-route']) {
+    const res = await get(path);
+    assert.equal(res.headers['x-content-type-options'], 'nosniff', path);
+    assert.equal(res.headers['referrer-policy'], 'strict-origin-when-cross-origin', path);
+  }
+});
+
+test('the visitor cookie is Secure only when the handler is told to', async () => {
+  const plain = await get('/api/health');
+  assert.match(plain.headers['set-cookie'][0], /^visitor=[0-9a-f-]{36}; Path=\/; Max-Age=31536000; HttpOnly; SameSite=Lax$/);
+
+  const secure = createServer(createHandler(store, { timeTravel: true, secureCookies: true }));
+  secure.listen(0, '127.0.0.1');
+  await once(secure, 'listening');
+  try {
+    const res = await new Promise((resolve, reject) => {
+      request({ host: '127.0.0.1', port: secure.address().port, path: '/api/health' }, (r) => {
+        r.resume();
+        r.on('end', () => resolve(r));
+      }).on('error', reject).end();
+    });
+    assert.match(res.headers['set-cookie'][0], /; SameSite=Lax; Secure$/);
+  } finally {
+    secure.close();
+    await once(secure, 'close');
+  }
 });
 
 // ---------- static files and caching ----------

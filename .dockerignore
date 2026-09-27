@@ -1,0 +1,20 @@
+# Only package.json, server/, public/ and scripts/reshuffle.js go into the image
+# (see the Dockerfile's COPY lines); this keeps the rest out of the build context.
+.git
+.gitattributes
+.gitignore
+.claude
+.dockerignore
+Dockerfile
+docker-compose.yml
+data
+docs
+test
+node_modules
+scripts/fetch_films.py
+scripts/films_raw.json
+__pycache__
+*.md
+*.log
+.DS_Store
+Thumbs.db

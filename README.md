@@ -58,6 +58,7 @@ Before December every door is locked. To pretend it's another date, add `?previe
 | `POST /api/doors/:day/watched` | Marks a film watched (`{"watched": false}` to undo). |
 | `POST /api/reset` | Closes all of this visitor's doors. |
 | `GET /api/catalog` | Every film in release order. Preview mode only. |
+| `GET /api/health` | Liveness check for uptime monitors and the Docker healthcheck; answers `{"ok": true}`. |
 
 The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. Visitors are identified by an anonymous cookie; there are no accounts. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
 
@@ -83,3 +84,63 @@ node scripts/reshuffle.js 2026
 This draws a new order for that year and prints it. Do it before December: visitors' opened and watched marks are stored by day number, so a mid-month reshuffle would put them on the wrong films.
 
 Reshuffling also syncs the catalog with `films.json` before drawing, so this is the way to take a film out of a year that already has a calendar: remove it from the JSON, reshuffle the year, then start the server.
+
+## Deploying
+
+The site is one Node process with no dependencies and one SQLite file, so a small VPS with Docker and a reverse proxy is enough. Everything below assumes that shape.
+
+### The image
+
+The `Dockerfile` at the root builds from the official `node:22.22-slim` image (`.node-version` pins the same minor for fnm, nodenv and other version managers that read it), copies `package.json`, `server/`, `public/` and `scripts/reshuffle.js`, runs as the unprivileged `node` user, and starts the server with the same command as `npm start`. There is no `npm install` step because there is nothing to install. The image sets `PORT=4747` and `DB_FILE=/data/stathmas.db`, declares `/data` as a volume, and has a `HEALTHCHECK` that asks `/api/health` every 30 seconds.
+
+```bash
+docker build -t stathmas .
+docker run -d --name stathmas --restart unless-stopped \
+  -p 127.0.0.1:4747:4747 -v stathmas-data:/data -e TIME_TRAVEL=0 stathmas
+```
+
+`docker-compose.yml` is the same thing written down, with `restart: unless-stopped` and a named volume. Restart matters: an unhandled error can end the Node process, and nothing inside the container will start it again, so Docker has to.
+
+```bash
+docker compose up -d --build
+docker compose logs -f
+```
+
+### The database is the only state
+
+`DB_FILE` must point at a persistent volume. Everything the site remembers is in that one SQLite file: the year's calendar order, and which doors each visitor has opened and marked watched. The film catalog is not state; it is loaded from `server/data/films.json` at every start. If the file is lost, the next start creates an empty database, draws a new random calendar, and every visitor's doors close. The compose file keeps it in a named volume called `stathmas-data`. If you bind-mount a host directory instead, it must be writable by uid 1000, the `node` user inside the image.
+
+To back it up, don't copy `stathmas.db` on its own: the server keeps the database in WAL mode, so recent writes sit in `stathmas.db-wal` beside it until a checkpoint. Either stop the container and copy all three files, or take a consistent snapshot while it runs:
+
+```bash
+docker compose exec stathmas node -e \
+  'new (require("node:sqlite").DatabaseSync)(process.env.DB_FILE).exec("VACUUM INTO \x27/data/backup.db\x27")'
+docker cp stathmas:/data/backup.db ./stathmas-$(date +%F).db
+```
+
+### HTTPS, compression and the visitor cookie
+
+Put a reverse proxy in front of the container to terminate HTTPS and compress responses. The Node server speaks plain HTTP and does not gzip; the SVG scene and the JavaScript modules compress well, so let the proxy do it. Caddy needs the least configuration, because it fetches and renews the certificate itself. This complete `Caddyfile` does everything the site needs:
+
+```
+stathmas.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:4747
+}
+```
+
+(nginx and Traefik work just as well; the only requirement is that the proxy forwards to port 4747.)
+
+Once HTTPS is in place, start the container with `SECURE_COOKIES=1`. The server then adds the `Secure` attribute to the anonymous visitor cookie, so browsers only send it over HTTPS. The server does not infer this from an `X-Forwarded-Proto` header: it is an explicit setting, so a proxy that forgets to set the header cannot silently downgrade the cookie, and local development over plain `http://` keeps working with the setting left unset. Do not set it without HTTPS, though. A browser drops a `Secure` cookie that arrives over `http://`, so every request would look like a new visitor and no door would stay open.
+
+### Before December
+
+- **Preview mode must be off.** With it on, anyone can open any door by adding `?preview=` to the URL, and `/catalog.html` lists every film. It is on by default for the prototype and is switched off with `TIME_TRAVEL=0`, which the compose file sets. If the server prints "Preview mode is on" at startup, it is on. (Check the top of `server/index.js` for the current name and default of this setting if the README and the code disagree.)
+- **Redraw, if you want to, before December 1, never during it.** The calendar order for a year is drawn once, the first time that year is requested, and stored. `node scripts/reshuffle.js 2026` draws a new one. Visitors' opened and watched marks are keyed by day number, so a reshuffle mid-month would put their marks on the wrong films. Inside the container:
+
+  ```bash
+  docker compose exec stathmas node scripts/reshuffle.js 2026
+  ```
+
+- **Point an uptime check at `GET /api/health`.** It answers `{"ok": true}` with a 200, needs no cookie, and is what the image's own healthcheck uses. `docker ps` shows the container as `healthy` or `unhealthy` from it.
+- **Time zone fallback.** Doors open at midnight in the visitor's own time zone, sent by the browser. `DEFAULT_TZ` (default `America/Los_Angeles`) is only used when a client doesn't send one.
