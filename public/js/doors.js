@@ -6,8 +6,13 @@ import { INK, rect, circ, ellipse, poly, path, line, star, offset } from './svg.
 const numeral = (x, y, size, n, fill, halo) =>
   `<text class="num" x="${x}" y="${y}" font-size="${size}" text-anchor="middle" fill="${fill}"${halo ? ` stroke="${halo}" stroke-width="${size * 0.14}" paint-order="stroke" stroke-linejoin="round"` : ''}>${n}</text>`;
 
-function crescent(cx, cy, r) {
-  return path(`M${cx},${cy - r} A${r},${r} 0 1 0 ${cx},${cy + r} A${r * 0.74},${r * 0.86} 0 1 1 ${cx},${cy - r} Z`, INK.candle);
+// A full moon filling the round door, a few craters printed in card.
+function fullMoon(cx, cy, r) {
+  return circ(cx, cy, r, INK.candle)
+    + circ(cx - r * 0.5, cy - r * 0.48, r * 0.17, INK.card, undefined, { opacity: 0.75 })
+    + circ(cx + r * 0.66, cy - r * 0.2, r * 0.12, INK.card, undefined, { opacity: 0.75 })
+    + circ(cx - r * 0.6, cy + r * 0.45, r * 0.12, INK.card, undefined, { opacity: 0.75 })
+    + circ(cx + r * 0.42, cy + r * 0.66, r * 0.09, INK.card, undefined, { opacity: 0.75 });
 }
 
 const ribbonFor = { [INK.berry]: INK.candle, [INK.fir]: INK.berry, [INK.candle]: INK.berry };
@@ -41,8 +46,8 @@ function face(slot, w, h, leaf) {
       };
     case 'moon':
       return {
-        art: rect(0, 0, w, h, INK.night, 'nl') + crescent(w * 0.42, h / 2, m * 0.42),
-        over: numeral(w * 0.66, h * 0.66, m * 0.3, n, INK.snow),
+        art: fullMoon(w / 2, h / 2, m / 2 - 1),
+        over: numeral(w / 2, h / 2 + m * 0.17, m * 0.46, n, INK.berry, INK.candle),
       };
     case 'poster':
       return {
