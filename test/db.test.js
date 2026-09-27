@@ -8,26 +8,26 @@ const slugs = (films) => films.map((f) => f.slug).sort();
 
 test('opening the database loads every film in films.json', () => {
   const store = openDb(':memory:');
-  assert.equal(store.filmCount(), 31);
+  assert.equal(store.films().length, 31);
   assert.deepEqual(slugs(store.films()), slugs(catalog));
   store.close();
 });
 
 test('opening with { seed: false } leaves the catalog alone', () => {
   const store = openDb(':memory:', { seed: false });
-  assert.equal(store.filmCount(), 0);
+  assert.equal(store.films().length, 0);
   store.close();
 });
 
 test('re-seeding applies edits and drops films that have left the JSON', () => {
   const store = openDb(':memory:');
-  assert.equal(store.filmCount(), 31);
+  assert.equal(store.films().length, 31);
 
   const thirty = catalog.slice(0, 30).map((f) => ({ ...f }));
   thirty[0] = { ...thirty[0], title: 'Lock, Stock (director’s cut)' };
   store.seedFilms(thirty);
 
-  assert.equal(store.filmCount(), 30);
+  assert.equal(store.films().length, 30);
   assert.deepEqual(slugs(store.films()), slugs(thirty));
   assert.equal(store.films().find((f) => f.slug === thirty[0].slug).title, thirty[0].title);
   store.close();
@@ -49,7 +49,7 @@ test('a film a stored calendar uses cannot be removed, and the sync is rolled ba
   });
 
   // Nothing from the failed sync landed: the row is still there and the edit is not.
-  assert.equal(store.filmCount(), 31);
+  assert.equal(store.films().length, 31);
   assert.equal(store.films().find((f) => f.slug === rest[0].slug).title, rest[0].title);
   assert.equal(store.days(2026).length, 31);
   store.close();
@@ -75,7 +75,7 @@ test('a film only an old calendar used goes once that year is reshuffled', () =>
   assert.throws(() => store.seedFilms(rest), FilmInUseError);
 
   store.reshuffle(2026, rest);
-  assert.equal(store.filmCount(), 30);
+  assert.equal(store.films().length, 30);
   const days = store.days(2026);
   assert.equal(days.length, 31);
   assert.ok(days.every((d) => d.film.slug !== gone.slug));
@@ -83,7 +83,7 @@ test('a film only an old calendar used goes once that year is reshuffled', () =>
 
   // The next start-up sync is now a no-op rather than an error.
   store.seedFilms(rest);
-  assert.equal(store.filmCount(), 30);
+  assert.equal(store.films().length, 30);
   store.close();
 });
 
@@ -92,8 +92,8 @@ test('a calendar for another year does not block removing a film it never used',
   store.seedFilms(catalog.slice(0, 30));
   store.days(2026); // 30 films behind 31 doors; the 31st film is not in this calendar
   store.seedFilms(catalog); // add it back
-  assert.equal(store.filmCount(), 31);
+  assert.equal(store.films().length, 31);
   store.seedFilms(catalog.slice(0, 30)); // and take it away again: no door depends on it
-  assert.equal(store.filmCount(), 30);
+  assert.equal(store.films().length, 30);
   store.close();
 });
