@@ -1,6 +1,7 @@
 import { composition } from './scene.js';
 import { faceSvg } from './doors.js';
 import { emblemSvg } from './emblems.js';
+import { esc } from './svg.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -170,12 +171,11 @@ function renderTag() {
 
 // The picture house bills the latest film opened, in slot-in letters: a
 // small line above, the title, a small line below.
-const escXml = (s) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 const TILT = [0, -1.6, 0.8, 0, 1.4, -0.6, 0.4, -1.2, 1, 0, -0.8, 1.6];
 
 function billLine(text, x, y, size, cls = '') {
   const tilt = [...text].map((_, i) => TILT[(i * 7 + text.length) % TILT.length]).join(' ');
-  return `<text class="marquee-letters ${cls}" x="${x}" y="${y.toFixed(1)}" font-size="${size.toFixed(1)}" text-anchor="middle" rotate="${tilt}">${escXml(text)}</text>`;
+  return `<text class="marquee-letters ${cls}" x="${x}" y="${y.toFixed(1)}" font-size="${size.toFixed(1)}" text-anchor="middle" rotate="${tilt}">${esc(text)}</text>`;
 }
 
 function splitTitle(title) {

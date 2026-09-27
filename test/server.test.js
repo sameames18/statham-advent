@@ -4,11 +4,13 @@ import { createServer, request } from 'node:http';
 import { connect } from 'node:net';
 import { once } from 'node:events';
 import { openDb } from '../server/db.js';
+import { statSync } from 'node:fs';
 import { createHandler } from '../server/app.js';
 
 let store;
 let server;
 let port;
+let base;
 
 before(async () => {
   store = openDb(':memory:');
@@ -16,9 +18,11 @@ before(async () => {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   port = server.address().port;
+  base = `http://127.0.0.1:${port}`;
 });
 
 after(async () => {
+  server.closeAllConnections();
   server.close();
   store.close();
   await once(server, 'close');
@@ -75,19 +79,103 @@ test('a door that has not unlocked yet returns 403', async () => {
   assert.equal(JSON.parse(res.body).error, 'Too early');
 });
 
+// ---------- static files and caching ----------
+
+const fetchGet = (path, headers = {}) => fetch(base + path, { headers });
+
+test('a first GET of a static file sends the file with validators and no-cache', async () => {
+  const res = await fetchGet('/js/app.js');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'text/javascript; charset=utf-8');
+  assert.equal(res.headers.get('cache-control'), 'no-cache');
+  assert.match(res.headers.get('etag'), /^W\/"\d+-[0-9a-f]+"$/);
+  assert.ok(!Number.isNaN(Date.parse(res.headers.get('last-modified'))), 'Last-Modified is an HTTP date');
+  const size = statSync(new URL('../public/js/app.js', import.meta.url)).size;
+  assert.equal(Number(res.headers.get('content-length')), size);
+  assert.equal((await res.arrayBuffer()).byteLength, size);
+});
+
+test('a second GET with If-None-Match set to that ETag gets a 304 with no body', async () => {
+  const first = await fetchGet('/styles.css');
+  const etag = first.headers.get('etag');
+  await first.arrayBuffer();
+
+  const again = await fetchGet('/styles.css', { 'If-None-Match': etag });
+  assert.equal(again.status, 304);
+  assert.equal(again.headers.get('etag'), etag);
+  assert.equal(again.headers.get('cache-control'), 'no-cache');
+  assert.equal((await again.arrayBuffer()).byteLength, 0);
+});
+
+test('a stale ETag gets the whole file again', async () => {
+  const res = await fetchGet('/styles.css', { 'If-None-Match': 'W/"1-abc"' });
+  assert.equal(res.status, 200);
+  assert.ok((await res.arrayBuffer()).byteLength > 0);
+});
+
+test('a strong tag with the same value still matches, and a list of tags is searched', async () => {
+  const first = await fetchGet('/');
+  const etag = first.headers.get('etag');
+  await first.arrayBuffer();
+  const strong = etag.replace(/^W\//, '');
+  const res = await fetchGet('/', { 'If-None-Match': `"nope", ${strong}` });
+  assert.equal(res.status, 304);
+});
+
+test('If-Modified-Since is honoured when there is no If-None-Match', async () => {
+  const first = await fetchGet('/js/scene.js');
+  const lastModified = first.headers.get('last-modified');
+  await first.arrayBuffer();
+
+  const fresh = await fetchGet('/js/scene.js', { 'If-Modified-Since': lastModified });
+  assert.equal(fresh.status, 304);
+  assert.equal((await fresh.arrayBuffer()).byteLength, 0);
+
+  const stale = await fetchGet('/js/scene.js', { 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT' });
+  assert.equal(stale.status, 200);
+  await stale.arrayBuffer();
+
+  const junk = await fetchGet('/js/scene.js', { 'If-Modified-Since': 'not a date' });
+  assert.equal(junk.status, 200);
+  await junk.arrayBuffer();
+});
+
+test('HEAD sends the same headers and no body', async () => {
+  const res = await fetch(base + '/js/app.js', { method: 'HEAD' });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('etag'), /^W\/"\d+-[0-9a-f]+"$/);
+  const size = statSync(new URL('../public/js/app.js', import.meta.url)).size;
+  assert.equal(Number(res.headers.get('content-length')), size);
+  assert.equal((await res.arrayBuffer()).byteLength, 0);
+
+  const cached = await fetch(base + '/js/app.js', { method: 'HEAD', headers: { 'If-None-Match': res.headers.get('etag') } });
+  assert.equal(cached.status, 304);
+});
+
+test('missing files, directories and paths outside public/ are still refused', async () => {
+  assert.equal((await fetchGet('/nope.js')).status, 404);
+  assert.equal((await fetchGet('/js')).status, 404);
+  assert.equal((await fetchGet('/js/')).status, 404);
+  assert.equal((await fetchGet('/..%2f..%2fpackage.json')).status, 403);
+});
+
 // ---------- the API as the page uses it ----------
 
 // A full request: method, headers and JSON body in, status, headers and parsed
-// body out. `port` defaults to the shared preview-on server.
+// body out. `on` picks the server; the default is the shared preview-on one.
 function call(path, { method = 'GET', headers = {}, body, on = () => port } = {}) {
   return new Promise((resolve, reject) => {
-    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const payload = body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body));
     const req = request({
       host: '127.0.0.1',
       port: on(),
       path,
       method,
       headers: payload ? { ...headers, 'Content-Type': 'application/json' } : headers,
+      // One socket per request. The 413 path destroys its socket, and a
+      // pooled keep-alive connection would hand that dead socket to the
+      // next request.
+      agent: false,
     }, (res) => {
       let raw = '';
       res.setEncoding('utf8');
@@ -119,19 +207,23 @@ function visitor(preview = PREVIEW) {
   };
 }
 
+const count = (doors, key) => doors.filter((d) => d[key]).length;
+
 test('/api/health answers', async () => {
   const res = await call('/api/health');
   assert.equal(res.status, 200);
   assert.deepEqual(res.json, { ok: true });
   assert.match(res.headers['content-type'], /^application\/json/);
+  assert.equal(res.headers['cache-control'], 'no-store');
 });
 
 test('the calendar carries no film data for locked or unopened doors', async () => {
   const me = visitor();
   const res = await me('/api/calendar');
   assert.equal(res.status, 200);
-  assert.equal(res.json.doors.length, 31);
+  assert.equal(res.json.year, 2026);
   assert.deepEqual(res.json.today, { year: 2026, month: 12, day: 14, preview: true });
+  assert.equal(res.json.doors.length, 31);
 
   const unlocked = res.json.doors.filter((d) => d.unlocked).map((d) => d.day);
   assert.deepEqual(unlocked, Array.from({ length: 14 }, (_, i) => i + 1));
@@ -140,9 +232,9 @@ test('the calendar carries no film data for locked or unopened doors', async () 
     assert.equal(d.film, null, `door ${d.day} leaks a film`);
     assert.equal(d.encore, undefined, `door ${d.day} leaks whether it is an encore`);
   }
-  assert.equal(JSON.stringify(res.json).includes('"title"'), false, 'no title anywhere in the payload');
-  assert.deepEqual(res.json.stats, { unlocked: 14, opened: 0, watched: 0 });
+  assert.equal(res.raw.includes('"title"'), false, 'no title anywhere in the payload');
   assert.equal(res.json.doors.find((d) => d.day === 14).isToday, true);
+  assert.equal(count(res.json.doors, 'isToday'), 1);
 });
 
 test('a visitor cookie is issued once and honoured on the next request', async () => {
@@ -174,7 +266,7 @@ test('a locked door refuses GET and POST open with 403', async () => {
 
   const cal = await me('/api/calendar');
   assert.equal(cal.json.doors.find((d) => d.day === 20).opened, false);
-  assert.equal(cal.json.stats.opened, 0);
+  assert.equal(count(cal.json.doors, 'opened'), 0);
 });
 
 test('an unlocked door that has not been opened does not give up its film either', async () => {
@@ -193,12 +285,11 @@ test('opening an unlocked door returns the film and the calendar then shows it o
   assert.equal(opened.json.opened, true);
   assert.equal(opened.json.watched, false);
   const { film } = opened.json;
-  for (const key of ['slug', 'title', 'year', 'director', 'runtime', 'character', 'hue', 'logline', 'note', 'wikipedia']) {
+  for (const key of ['slug', 'title', 'year', 'director', 'runtime', 'character', 'logline', 'note', 'wikipedia']) {
     assert.ok(key in film, `film detail has ${key}`);
   }
   assert.ok(film.title.length > 0);
-  assert.equal('id' in film, false, 'the database id stays inside');
-  assert.equal('wiki' in film, false, 'the raw wiki slug is turned into a link');
+  for (const key of ['id', 'wiki', 'gross', 'hue']) assert.equal(key in film, false, `${key} stays inside`);
   assert.match(film.wikipedia, /^https:\/\/en\.wikipedia\.org\/wiki\//);
 
   const again = await me('/api/doors/7');
@@ -209,12 +300,12 @@ test('opening an unlocked door returns the film and the calendar then shows it o
   const door = cal.json.doors.find((d) => d.day === 7);
   assert.equal(door.opened, true);
   assert.equal(door.encore, false);
-  assert.deepEqual(door.film, { slug: film.slug, title: film.title, year: film.year, hue: film.hue, character: film.character });
-  assert.equal(cal.json.stats.opened, 1);
+  assert.deepEqual(door.film, { slug: film.slug, title: film.title, year: film.year, character: film.character });
+  assert.equal(count(cal.json.doors, 'opened'), 1);
   assert.equal(cal.json.doors.filter((d) => d.film).length, 1, 'only the opened door has a film');
 
   const someoneElse = await visitor()('/api/calendar');
-  assert.equal(someoneElse.json.stats.opened, 0, 'another visitor sees their own closed doors');
+  assert.equal(count(someoneElse.json.doors, 'opened'), 0, 'another visitor sees their own closed doors');
 });
 
 test('watched toggles on and off', async () => {
@@ -226,7 +317,7 @@ test('watched toggles on and off', async () => {
   assert.equal(on.json.watched, true);
   let cal = await me('/api/calendar');
   assert.equal(cal.json.doors.find((d) => d.day === 3).watched, true);
-  assert.equal(cal.json.stats.watched, 1);
+  assert.equal(count(cal.json.doors, 'watched'), 1);
 
   const off = await me('/api/doors/3/watched', { method: 'POST', body: { watched: false } });
   assert.equal(off.status, 200);
@@ -234,7 +325,7 @@ test('watched toggles on and off', async () => {
   assert.equal(off.json.opened, true, 'unwatching does not close the door');
   cal = await me('/api/calendar');
   assert.equal(cal.json.doors.find((d) => d.day === 3).watched, false);
-  assert.equal(cal.json.stats.watched, 0);
+  assert.equal(count(cal.json.doors, 'watched'), 0);
 
   // Marking an unopened door watched opens it too.
   const straight = await me('/api/doors/4/watched', { method: 'POST', body: { watched: true } });
@@ -255,10 +346,22 @@ test('reset closes all of this visitor\'s doors and nobody else\'s', async () =>
   assert.deepEqual(res.json, { ok: true });
 
   const mine = await me('/api/calendar');
-  assert.deepEqual(mine.json.stats, { unlocked: 14, opened: 0, watched: 0 });
+  assert.equal(count(mine.json.doors, 'opened'), 0);
   assert.ok(mine.json.doors.every((d) => d.film === null));
   const theirs = await other('/api/calendar');
-  assert.equal(theirs.json.stats.opened, 1);
+  assert.equal(count(theirs.json.doors, 'opened'), 1);
+});
+
+test('a malformed or oversized POST body is handled', async () => {
+  const me = visitor();
+  // Junk is read as {}, so this marks the door watched.
+  const junk = await me('/api/doors/5/watched', { method: 'POST', body: '{not json' });
+  assert.equal(junk.status, 200);
+  assert.equal(junk.json.watched, true);
+
+  const huge = await me('/api/doors/5/watched', { method: 'POST', body: { pad: 'x'.repeat(20_000) } });
+  assert.equal(huge.status, 413);
+  assert.deepEqual(huge.json, { error: 'Body too large' });
 });
 
 test('unknown doors and routes are 404', async () => {
@@ -277,23 +380,16 @@ test('static paths cannot climb out of public/', async () => {
     assert.ok([403, 404].includes(res.status), `${path} answered ${res.status}`);
     assert.equal(res.raw.includes(source), false, `${path} served the file`);
   }
-  // The one that decodes to a real climb is refused outright, not just missing.
+  // The URL parser folds a plain `..` away, so those two come back as a
+  // missing file inside public/. An encoded slash survives parsing and is
+  // the one that reaches the directory check, which refuses it outright.
   assert.equal((await call('/..%2f..%2fserver/db.js')).status, 403);
-
-  // And ordinary files still come through.
-  const index = await call('/');
-  assert.equal(index.status, 200);
-  assert.match(index.headers['content-type'], /^text\/html/);
-  assert.match(index.raw, /<title>Stathmas<\/title>/);
-  const js = await call('/js/app.js');
-  assert.equal(js.status, 200);
-  assert.match(js.headers['content-type'], /^text\/javascript/);
 });
 
 test('/api/catalog lists every film while preview is on', async () => {
   const res = await call('/api/catalog');
   assert.equal(res.status, 200);
-  assert.equal(res.json.films.length, store.filmCount());
+  assert.equal(res.json.films.length, store.films().length);
   assert.ok(res.json.films.every((f) => f.title && !('id' in f)));
 });
 
@@ -313,10 +409,10 @@ test('with preview off, /api/catalog is 404 and X-Preview-Date is ignored', asyn
     assert.equal(door.json.error, 'Too early');
 
     const cal = await call('/api/calendar', { on, headers: { 'X-Preview-Date': '2100-12-31' } });
-    assert.equal(cal.json.timeTravel, false);
     assert.equal(cal.json.today.preview, false);
     assert.notEqual(cal.json.today.year, 2100);
   } finally {
+    strict.closeAllConnections();
     strict.close();
     await once(strict, 'close');
   }

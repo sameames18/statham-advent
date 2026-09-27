@@ -16,7 +16,7 @@ before(() => { store = openDb(':memory:'); });
 after(() => store.close());
 
 test('the catalog is seeded from films.json', () => {
-  assert.equal(store.filmCount(), FILMS.length);
+  assert.equal(store.films().length, FILMS.length);
   assert.deepEqual(store.films().map((f) => f.slug).sort(), FILMS.map((f) => f.slug).sort());
 });
 
@@ -32,6 +32,9 @@ test('ensureCalendar draws 31 days, each with a distinct film, and keeps that dr
   assert.deepEqual(draw(store, YEAR), first);
   // days() also calls ensureCalendar, so a third look is the same draw too.
   assert.deepEqual(draw(store, YEAR), first);
+  // and day() reads the same row that days() lists.
+  assert.deepEqual(store.day(YEAR, 12), store.days(YEAR)[11]);
+  assert.equal(store.day(YEAR, 32), undefined);
 });
 
 test('open, setWatched and resetVisitor round-trip through doorStates', () => {
@@ -48,6 +51,8 @@ test('open, setWatched and resetVisitor round-trip through doorStates', () => {
   states = store.doorStates(VISITOR, YEAR);
   assert.ok(states.get(3).watchedAt, 'watched sets a timestamp');
   assert.ok(states.get(3).openedAt, 'and keeps the opened one');
+  assert.deepEqual(store.doorState(VISITOR, YEAR, 3), states.get(3), 'doorState reads the one row');
+  assert.equal(store.doorState(VISITOR, YEAR, 4), undefined);
 
   store.setWatched(VISITOR, YEAR, 3, false);
   states = store.doorStates(VISITOR, YEAR);
@@ -95,7 +100,7 @@ test('re-seeding with a changed title updates the existing row in place', () => 
     const meg = second.films().find((f) => f.slug === 'the-meg');
     assert.equal(meg.title, 'The Meg (Director’s Cut)');
     assert.equal(meg.id, idBefore, 'same row, not a new one');
-    assert.equal(second.filmCount(), FILMS.length, 'no duplicate was inserted');
+    assert.equal(second.films().length, FILMS.length, 'no duplicate was inserted');
     assert.equal(second.days(YEAR)[dayOfMeg - 1].film.title, 'The Meg (Director’s Cut)', 'the calendar sees the new title');
     second.close();
   } finally {

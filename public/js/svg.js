@@ -65,6 +65,8 @@ export function star(cx, cy, r, fill = INK.candle, cls, inner = 0.45) {
 
 
 // Deterministic randomness, so the picture is the same on every visit.
+// server/calendar.js has its own copy that seeds the year's film draw. This
+// one only affects the picture and may change freely; leave that one alone.
 export function rng(seed) {
   let a = seed >>> 0;
   return () => {
