@@ -115,7 +115,10 @@ async function api(req, res, url) {
   const ctx = { visitor: visitorId(req, res), now: today(req) };
   const yearParam = Number(url.searchParams.get('year'));
   ctx.year = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= 2100 ? yearParam : seasonYear(ctx.now);
-  if (req.method === 'POST') ctx.body = await readJson(req);
+  if (req.method === 'POST') {
+    ctx.body = await readJson(req, res);
+    if (ctx.body === undefined) return; // 413 already sent
+  }
 
   const path = url.pathname;
   if (req.method === 'GET' && path === '/api/health') return send(res, 200, { ok: true });
@@ -148,19 +151,31 @@ async function staticFile(req, res, url) {
 
 // ---------- plumbing ----------
 
-function send(res, status, body) {
+function send(res, status, body, done) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(body), done);
 }
 
-async function readJson(req) {
-  let raw = '';
+const MAX_BODY_BYTES = 10_000;
+
+// Collect the body as bytes and decode it once at the end: appending chunks to
+// a string would mangle a multi-byte character split across two chunks. An
+// empty or malformed body is tolerated as {}. A body over the limit is answered
+// with 413 here and the stream destroyed; the caller gets undefined and stops.
+async function readJson(req, res) {
+  const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
-    raw += chunk;
-    if (raw.length > 10_000) break;
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      await new Promise((resolve) => send(res, 413, { error: 'Body too large' }, resolve));
+      req.destroy();
+      return undefined;
+    }
+    chunks.push(chunk);
   }
   try {
-    return raw ? JSON.parse(raw) : {};
+    return size ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
   } catch {
     return {};
   }
