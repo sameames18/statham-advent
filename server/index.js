@@ -13,10 +13,20 @@ const DEFAULT_TZ = process.env.DEFAULT_TZ ?? 'America/Los_Angeles';
 // Preview mode lets the client pretend it's a different date (?preview= in the
 // page URL). Handy outside December; switch it off (TIME_TRAVEL=0) for a real one.
 const TIME_TRAVEL = process.env.TIME_TRAVEL !== '0';
+// Behind a reverse proxy that terminates HTTPS, set SECURE_COOKIES=1 so the
+// visitor cookie is only ever sent over HTTPS. Off by default so plain-HTTP
+// local development keeps working (a Secure cookie is dropped over http://).
+const SECURE_COOKIES = !!process.env.SECURE_COOKIES && process.env.SECURE_COOKIES !== '0';
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const PUBLIC_ROOT = normalize(PUBLIC_DIR.endsWith(sep) ? PUBLIC_DIR : PUBLIC_DIR + sep);
 
 const store = openDb();
+
+// Sent with every response, static or API.
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -33,7 +43,7 @@ function visitorId(req, res) {
   const match = /(?:^|;\s*)visitor=([0-9a-f-]{36})/.exec(req.headers.cookie ?? '');
   if (match) return match[1];
   const id = randomUUID();
-  res.setHeader('Set-Cookie', `visitor=${id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `visitor=${id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${SECURE_COOKIES ? '; Secure' : ''}`);
   return id;
 }
 
@@ -139,7 +149,7 @@ async function staticFile(req, res, url) {
   if (!file.startsWith(PUBLIC_ROOT)) return send(res, 403, { error: 'Forbidden' });
   try {
     const body = await readFile(file);
-    res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(body);
   } catch {
     send(res, 404, { error: 'Not found' });
@@ -149,7 +159,7 @@ async function staticFile(req, res, url) {
 // ---------- plumbing ----------
 
 function send(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
 }
 
