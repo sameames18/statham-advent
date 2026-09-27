@@ -181,6 +181,51 @@ test('HEAD sends the same headers and no body', async () => {
   assert.equal(cached.status, 304);
 });
 
+// ---------- link-preview thumbnail ----------
+
+const ogImage = (html) => /<meta property="og:image" content="([^"]*)">/.exec(html)?.[1];
+
+test('the thumbnail is served as a JPEG', async () => {
+  const res = await fetchGet('/og.jpg');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/jpeg');
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  assert.deepEqual([...bytes.slice(0, 3)], [0xff, 0xd8, 0xff], 'starts with the JPEG signature');
+});
+
+test('without SITE_URL the page points at the thumbnail root-relative', async () => {
+  const html = await (await fetchGet('/')).text();
+  assert.equal(ogImage(html), '/og.jpg');
+  assert.match(html, /<meta name="twitter:card" content="summary">/);
+  assert.equal(html.includes('%SITE_URL%'), false);
+});
+
+test('with SITE_URL the page points at the thumbnail absolutely, with lengths and ETag to match', async () => {
+  const site = createServer(createHandler(store, { timeTravel: true, siteUrl: 'https://stathmas.example.com' }));
+  site.listen(0, '127.0.0.1');
+  await once(site, 'listening');
+  const at = `http://127.0.0.1:${site.address().port}`;
+  try {
+    for (const path of ['/', '/index.html']) {
+      const res = await fetch(at + path);
+      const body = Buffer.from(await res.arrayBuffer());
+      assert.equal(ogImage(body.toString('utf8')), 'https://stathmas.example.com/og.jpg', path);
+      assert.equal(Number(res.headers.get('content-length')), body.length, path);
+
+      const head = await fetch(at + path, { method: 'HEAD' });
+      assert.equal(Number(head.headers.get('content-length')), body.length, `HEAD ${path}`);
+
+      // A cached copy from before SITE_URL was set must not be answered with a 304.
+      const plain = await fetchGet(path);
+      await plain.arrayBuffer();
+      assert.notEqual(res.headers.get('etag'), plain.headers.get('etag'), path);
+    }
+  } finally {
+    site.close();
+    await once(site, 'close');
+  }
+});
+
 test('missing files, directories and paths outside public/ are still refused', async () => {
   assert.equal((await fetchGet('/nope.js')).status, 404);
   assert.equal((await fetchGet('/js')).status, 404);

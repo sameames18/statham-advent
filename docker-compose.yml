@@ -18,6 +18,9 @@ services:
       # cookie Secure. Leave it unset while testing over plain http://, or the
       # browser will discard the cookie and every request looks like a new visitor.
       # SECURE_COOKIES: "1"
+      # The public address, so link previews (Slack, iMessage, X) can find the
+      # thumbnail. See "Link previews" in README.md.
+      # SITE_URL: https://stathmas.example.com
       # Fallback time zone when the browser doesn't send one.
       # DEFAULT_TZ: America/Los_Angeles
     volumes:

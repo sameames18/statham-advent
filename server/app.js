@@ -1,6 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   DAYS_IN_DECEMBER, dateIn, isUnlocked, isValidTimeZone, parseDate, seasonYear,
@@ -19,6 +19,7 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.jpg': 'image/jpeg',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
   '.ico': 'image/x-icon',
@@ -117,9 +118,17 @@ export function createHandler(store, {
   // Mark the visitor cookie Secure (HTTPS only). Set when a reverse proxy
   // terminates HTTPS in front of the server; off for plain-HTTP development.
   secureCookies = false,
+  // The site's public origin, e.g. https://stathmas.example.com, with no
+  // trailing slash. Link-preview crawlers want the thumbnail's absolute URL
+  // and only the deployment knows it; empty leaves the URL root-relative.
+  siteUrl = '',
   publicDir = DEFAULT_PUBLIC_DIR,
 } = {}) {
   const publicRoot = normalize(publicDir.endsWith(sep) ? publicDir : publicDir + sep);
+  // index.html is the one templated file: %SITE_URL% is filled in on the way
+  // out. The origin goes into its ETag, so a changed SITE_URL isn't a 304.
+  const indexFile = normalize(join(publicDir, 'index.html'));
+  const siteTag = siteUrl ? '-' + createHash('sha1').update(siteUrl).digest('hex').slice(0, 8) : '';
 
   // "Today", in the visitor's own time zone so doors open at their midnight.
   function today(req) {
@@ -210,7 +219,8 @@ export function createHandler(store, {
     }
     if (!info.isFile()) return send(res, 404, { error: 'Not found' });
 
-    const etag = `W/"${info.size}-${Math.floor(info.mtimeMs).toString(16)}"`;
+    const templated = file === indexFile;
+    const etag = `W/"${info.size}-${Math.floor(info.mtimeMs).toString(16)}${templated ? siteTag : ''}"`;
     const headers = {
       ...SECURITY_HEADERS,
       'Cache-Control': 'no-cache',
@@ -223,7 +233,7 @@ export function createHandler(store, {
     }
 
     headers['Content-Type'] = TYPES[extname(file)] ?? 'application/octet-stream';
-    if (req.method === 'HEAD') {
+    if (req.method === 'HEAD' && !templated) {
       res.writeHead(200, { ...headers, 'Content-Length': info.size });
       return res.end();
     }
@@ -232,6 +242,11 @@ export function createHandler(store, {
       body = await readFile(file);
     } catch {
       return send(res, 404, { error: 'Not found' });
+    }
+    if (templated) body = Buffer.from(body.toString('utf8').replaceAll('%SITE_URL%', siteUrl));
+    if (req.method === 'HEAD') {
+      res.writeHead(200, { ...headers, 'Content-Length': body.length });
+      return res.end();
     }
     res.writeHead(200, { ...headers, 'Content-Length': body.length });
     res.end(body);
