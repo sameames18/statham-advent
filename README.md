@@ -2,6 +2,8 @@
 
 An advent calendar of Jason Statham action vehicles, dressed as a printed card calendar from about 1962. Thirty-one paper doors are hidden in a snowy village on Christmas Eve, one for each day of December. Each opens at midnight in the visitor's own time zone and shows a small painted picture of that night's film: a tin shark for *The Meg*, a honeybee on a skep for *The Beekeeper*. The calendar plays Christmas completely straight.
 
+The design direction, and the reasoning behind it, is in [docs/design.md](docs/design.md).
+
 ## The films
 
 Thirty-one films, one per door. Twenty-eight are every film where Statham is the lead in an action or crime picture, from *The Transporter* (2002) to *Mutiny* (2026). Three more are there by choice: *Lock, Stock and Two Smoking Barrels* and *Snatch*, the Guy Ritchie films that started it, and *The Expendables* as the one ensemble wildcard. The rest of the ensembles and supporting turns are left out: the *Fast & Furious* films, *Hobbs & Shaw*, the *Expendables* sequels, *The Italian Job*, *Cellular*, *Spy*, *13* and the rest.
