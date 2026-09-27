@@ -437,5 +437,3 @@ export function composition(name) {
   }
   return cache[name];
 }
-
-export { esc };
