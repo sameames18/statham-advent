@@ -68,10 +68,13 @@ function seedFilms(db, films = JSON.parse(readFileSync(FILMS_JSON, 'utf8'))) {
   db.exec('COMMIT');
 }
 
+// Row shapes handed out by the store.
+const dayEntry = ({ day, encore, id, ...film }) => ({ day, encore: !!encore, film: { id, ...film } });
+const doorState = (r) => ({ openedAt: r.opened_at, watchedAt: r.watched_at });
+
 function makeStore(db) {
   const q = {
     filmIds: db.prepare('SELECT id FROM films ORDER BY id'),
-    filmCount: db.prepare('SELECT count(*) AS n FROM films'),
     films: db.prepare('SELECT * FROM films ORDER BY year, id'),
     calendar: db.prepare('SELECT seed FROM calendars WHERE year = ?'),
     insertCalendar: db.prepare('INSERT INTO calendars (year, seed) VALUES (?, ?)'),
@@ -81,7 +84,12 @@ function makeStore(db) {
       SELECT d.day, d.encore, f.*
       FROM calendar_days d JOIN films f ON f.id = d.film_id
       WHERE d.year = ? ORDER BY d.day`),
+    day: db.prepare(`
+      SELECT d.day, d.encore, f.*
+      FROM calendar_days d JOIN films f ON f.id = d.film_id
+      WHERE d.year = ? AND d.day = ?`),
     doorStates: db.prepare('SELECT day, opened_at, watched_at FROM door_states WHERE visitor_id = ? AND year = ?'),
+    doorState: db.prepare('SELECT day, opened_at, watched_at FROM door_states WHERE visitor_id = ? AND year = ? AND day = ?'),
     open: db.prepare(`INSERT INTO door_states (visitor_id, year, day) VALUES (?, ?, ?)
                       ON CONFLICT DO NOTHING`),
     watched: db.prepare(`UPDATE door_states SET watched_at = CASE WHEN ? THEN datetime('now') END
@@ -90,7 +98,6 @@ function makeStore(db) {
   };
 
   const store = {
-    filmCount: () => q.filmCount.get().n,
     films: () => q.films.all(),
 
     // The calendar for a year is drawn once, with a random seed, then kept.
@@ -116,13 +123,26 @@ function makeStore(db) {
 
     days(year) {
       store.ensureCalendar(year);
-      return q.days.all(year).map(({ day, encore, id, ...film }) => ({ day, encore: !!encore, film: { id, ...film } }));
+      return q.days.all(year).map(dayEntry);
+    },
+
+    // One day's entry, or undefined if the day is out of range.
+    day(year, day) {
+      store.ensureCalendar(year);
+      const row = q.day.get(year, day);
+      return row && dayEntry(row);
     },
 
     doorStates(visitorId, year) {
       const map = new Map();
-      for (const r of q.doorStates.all(visitorId, year)) map.set(r.day, { openedAt: r.opened_at, watchedAt: r.watched_at });
+      for (const r of q.doorStates.all(visitorId, year)) map.set(r.day, doorState(r));
       return map;
+    },
+
+    // One door's state for a visitor, or undefined if it has not been opened.
+    doorState(visitorId, year, day) {
+      const row = q.doorState.get(visitorId, year, day);
+      return row && doorState(row);
     },
 
     open: (visitorId, year, day) => q.open.run(visitorId, year, day),

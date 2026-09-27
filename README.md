@@ -10,7 +10,7 @@ Thirty-one films, one per door. Twenty-eight are every film where Statham is the
 
 The order is random and drawn once per year, the first time that year's calendar is requested. After that it's stored, so every visitor gets the same calendar. (If the catalog ever has fewer films than days, the spare days become encores of films already shown.)
 
-Facts (director, runtime, release year, character, box office) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json` and is loaded into the database each time the server starts.
+Facts (director, runtime, release year, character) come from Wikipedia; `scripts/fetch_films.py` is the research pull. Loglines and the dry "briefing" notes are written for this site. The catalog lives in `server/data/films.json` and is loaded into the database each time the server starts.
 
 ## Running it
 
@@ -41,6 +41,8 @@ Before December every door is locked. To pretend it's another date, add `?previe
 | `GET /api/health` | Liveness check for uptime monitors and the Docker healthcheck; answers `{"ok": true}`. |
 
 The server decides what's unlocked, so there's no peeking at future films through the browser's developer tools. Visitors are identified by an anonymous cookie; there are no accounts. The client sends its time zone in an `X-Timezone` header so doors open at local midnight.
+
+**The season** runs from the 1st of December to Twelfth Night, the 6th of January, when the decorations come down. Until then the API keeps serving the December just gone, with all 31 doors unlocked, so a visitor who missed a night can still catch up and the ribbon tag reads "That was Stathmas 2026". From the 7th of January the site switches to the coming December: every door is locked, the tag counts down to the 1st, and that year's calendar is drawn the first time it's requested. `seasonYear` in `server/calendar.js` makes the choice; the date is `SEASON_END` next to it. `?year=` on the API still asks for any year explicitly.
 
 **Frontend** (`public/`): plain HTML, CSS and JavaScript modules with no build step.
 
