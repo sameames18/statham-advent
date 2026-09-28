@@ -1,7 +1,7 @@
 // The printed front of each paper door. Each kind matches the thing it's
 // cut into: a lit window, a front door, a star, a parcel on the sled.
 
-import { INK, rect, circ, ellipse, poly, path, line, star, offset } from './svg.js';
+import { INK, rect, circ, ellipse, line, star, offset } from './svg.js';
 
 const numeral = (x, y, size, n, fill, halo) =>
   `<text class="num" x="${x}" y="${y}" font-size="${size}" text-anchor="middle" fill="${fill}"${halo ? ` stroke="${halo}" stroke-width="${size * 0.14}" paint-order="stroke" stroke-linejoin="round"` : ''}>${n}</text>`;

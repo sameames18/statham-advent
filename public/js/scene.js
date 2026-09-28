@@ -3,7 +3,7 @@
 // composition lists its door slots; the doors themselves are HTML laid over
 // the picture so they can swing open.
 
-import { INK, rect, circ, ellipse, poly, path, line, star, offset, rng, esc } from './svg.js';
+import { INK, rect, circ, ellipse, poly, path, line, star, offset, rng } from './svg.js';
 
 export const DAYS = 31;
 export const BIG_DOOR = 24;
