@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # No npm dependencies yet; add an "npm" entry here if package.json gains any.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
