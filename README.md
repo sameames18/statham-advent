@@ -59,7 +59,9 @@ npm run test:browser
 
 The last browser test reports how much of the page's scripts the others exercised and fails if that drops. Playwright is pinned to the version whose Chromium build the review environment already has, so bump it deliberately.
 
-CI also runs an offline `vercel build` against a stand-in project, so a broken `vercel.json` fails there rather than on deploy.
+`npm run lint` runs ESLint with its recommended rules, which catch mistakes (undefined names, unused imports) rather than style. It needs `npm install` first, like the browser tests.
+
+CI also lints, and runs an offline `vercel build` against a stand-in project, so a broken `vercel.json` fails there rather than on deploy.
 
 ### Preview mode
 
