@@ -47,7 +47,7 @@ The server sends its files with `ETag` and `Last-Modified` validators and `Cache
 npm test
 ```
 
-Unit tests for the calendar logic, the catalog and the draw, the door cookie, the settings, the page's wording, the drawing modules and the HTTP API, plus the Vercel function, all on Node's built-in test runner with nothing to install. They run on every push and pull request (`.github/workflows/test.yml`), on Node 22.13, 22 and 24.
+Unit tests for the calendar logic, the catalog and the draw, the door cookie, the settings, the page's wording, the drawing modules and the HTTP API, plus the Vercel function, all on Node's built-in test runner with nothing to install. They run on every pull request and every push to `main` (`.github/workflows/test.yml`), on Node 22.13, 22 and 24.
 
 The page itself (`public/js/app.js`: opening doors, the not-yet note, "Seen it", the list of doors, reset, preview, the phone layout, the keyboard, reduced motion and the glitter) is tested in headless Chromium. That needs the one development dependency, Playwright, and a browser, so it is a separate script:
 
