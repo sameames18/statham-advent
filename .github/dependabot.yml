@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # npm is left out on purpose: Playwright is the only dependency, and it is pinned
+  # to the review environment's Chromium build, so it gets bumped by hand (README, Tests).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
